@@ -40,6 +40,11 @@ def loadData(path):
     locations['x']=locations['lng']*PI*R/180.0*math.cos(_y_center*PI/180.0)
     locations['y']=locations['lat']*PI*R/180.8
 
+    _xMin=locations['x'].mean()
+    _yMin=locations['y'].mean()
+    locations['x']=locations['x']-_xMin
+    locations['y']=locations['y']-_yMin
+
 
     #combine the two type of orders. assign type 0 to normal orders so that when calculating 
     #the time window penalty we can just multiply the penalty by the order_type to eliminate the
@@ -66,13 +71,15 @@ def loadData(path):
     allOrders.index=allOrders.order_id
 
     allOrders['ox']=allOrders.apply(lambda x: locations.loc[x.ori_id,'x'],axis=1)
-    allOrders['ox']=allOrders.apply(lambda x: locations.loc[x.ori_id,'y'],axis=1)
+    allOrders['oy']=allOrders.apply(lambda x: locations.loc[x.ori_id,'y'],axis=1)
     allOrders['dx']=allOrders.apply(lambda x: locations.loc[x.dest_id,'x'],axis=1)
-    allOrders['dx']=allOrders.apply(lambda x: locations.loc[x.dest_id,'y'],axis=1)
+    allOrders['dy']=allOrders.apply(lambda x: locations.loc[x.dest_id,'y'],axis=1)
+    
+    allOrders.to_csv('allOrders.csv')
   
 
 
-    print allOrders.loc[['F0001','E0001'],:]
+    #print allOrders.loc[['F0001','E0001'],:]
 
 
     print 'load complted.'
