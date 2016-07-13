@@ -81,6 +81,7 @@ def recal_time(r, allo):
         ord_id = r[4][i]
         if pck_num < 0:
             # TBA delivery, arr_time = last_leave + travel, leave_time = arr_time + handling remember round
+            # allo.at['E0002', 'dest_id']
             pass
         elif allo.at[ord_id, 'order_type'] == 0:
             # TBA pickup at site, arr_time = last_leave + travel, leave_time = arr_time remember round
