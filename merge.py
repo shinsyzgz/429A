@@ -1,7 +1,8 @@
 import numpy as np
+import copy
 
 # Constant: speed is the car speed. MERGE_MAX_DISTANCE is the max distance to merge
-SPEED = 250
+SPEED = 250.0
 MERGE_MAX_DISTANCE = 45000
 
 
@@ -42,13 +43,21 @@ def try_next(res_routes, ra, rb, allo, und_a, last_b, max_load=140, time_lim=720
         ra = bb_tsp(ra, allo, und_a, time_lim)
         res_routes.append(ra)
         return
-    # TBA try combine the following node in rb
+    # try combine the following node in rb
     next_id, next_pck, next_oid = rb[0][0], rb[3][0], rb[4][0]
-    is_suc, r_ab, und_ab = route_node_merge(ra, und_a, [next_id, next_pck, next_oid], allo)
+    is_suc, r_ab, und_ab = route_node_merge(ra, und_a, [next_id, next_pck, next_oid], allo, max_load, time_lim)
     if is_suc:
-        pass
-    # TBA try combine the node in und_a
-    pass
+        new_rb = [rb[0][1:], [], [], rb[3][1:], rb[4][1:]]
+        try_next(res_routes, r_ab, new_rb, allo, und_ab, last_b-1, max_load, time_lim)
+    elif und_a[0] <= 0:
+        return
+    # try combine the node in und_a
+    for de_or_id in und_a[1]:
+        de_id, de_pck = allo.at[de_or_id, 'dest_id'], -allo.at[de_or_id, 'num']
+        is_suc, r_aa, und_aa = route_node_merge(ra, und_a, [de_id, de_pck, de_or_id], allo, max_load, time_lim)
+        if is_suc:
+            try_next(res_routes, r_aa, rb, allo, und_aa, last_b, max_load, time_lim)
+    return
 
 
 def bb_tsp(r, allo, und_a, time_lim=720):
@@ -56,10 +65,22 @@ def bb_tsp(r, allo, und_a, time_lim=720):
     return r
 
 
-def route_node_merge(r, und_a, node, allo):
-    # TBA merge the node; remember deepcopy r and und_a
+def route_node_merge(r, und_a, node, allo, max_load=140, time_lim=720):
     # node=[node id, pack number, order id]
-    return True, r, und_a
+    # judge whether suitable to merge: max distance, max time, package capacity
+    if und_a[0] + node[1] > max_load:
+        return False, [], []
+    xa, ya = get_cor(r[4][-1], allo, int(r[3][-1] < 0))
+    xn, yn = get_cor(node[2], allo, int(node[1] < 0))
+    dis = node_dis(xa, ya, xn, yn)
+    if dis > MERGE_MAX_DISTANCE:
+        return False, [], []
+    if np.round(r[2][-1]) + np.round(dis/SPEED) > time_lim:
+        return False, [], []
+    m_r = copy.deepcopy(r)
+    m_und = copy.deepcopy(und_a)
+    # TBA merge the node; remember deepcopy r and und_a
+    return True, m_r, m_und
 
 
 def find_last(r):
