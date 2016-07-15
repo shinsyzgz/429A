@@ -20,7 +20,6 @@ def merge_two(route_a, route_b, all_orders, last_a=-1, last_b=-1, undelivered_a=
         last_a, undelivered_a = find_last(route_a)
     if last_b == -1:
         last_b, undelivered_b = find_last(route_b)
-    print(last_a)
     return (merge_order(route_a, route_b, all_orders, last_a, undelivered_a, last_b, max_load, time_lim) +
             merge_order(route_b, route_a, all_orders, last_b, undelivered_b, last_a, max_load, time_lim))
 
@@ -67,10 +66,6 @@ def try_next(res_routes, ra, rb, allo, und_a, last_b, max_load=140, time_lim=720
 
 def bb_tsp(r, allo, und_a, time_lim=720, best_obj=np.inf, append_und=True, now_punish=0.0, out_obj=False, pre_cal=None):
     # TP append [last_a, und_a] to r
-    # print('r: ' + str(r[4][22:]))
-    # print('best obj: ' + str(best_obj))
-    # print('punish: ' + str(now_punish))
-    # print(r[1][-1])
     if append_und:
         last_a = len(r[0]) - 1
         if len(r) == 5:
@@ -91,6 +86,8 @@ def bb_tsp(r, allo, und_a, time_lim=720, best_obj=np.inf, append_und=True, now_p
             de_id, de_pck = pre_cal['node ID'][temp_ind], pre_cal['package num'][temp_ind]
         is_suc, r_aa, und_aa, punish = route_node_merge(r, und_a, [de_id, de_pck, de_or_id], allo,
                                                         MAX_LOADS, time_lim, False, True, pre_cal)
+        if not is_suc:
+            raise Exception('Exceed load limits')
         next_punish = now_punish + punish
         adjust = 0.0
         if (not (pre_cal is None)) and len(und_aa[1]) > 0:
@@ -102,20 +99,18 @@ def bb_tsp(r, allo, und_a, time_lim=720, best_obj=np.inf, append_und=True, now_p
             if left_nm > 1:
                 min_inter = min([pre_cal['travel time'][loop_i][loop_j] for loop_i in left_ind for loop_j in left_ind
                                 if loop_i > loop_j])
-            total_left_stay = sum([pre_cal['stay time'][loop_i] for loop_i in left_ind])
-            adjust += min_last_to_left + (left_nm - 1) * min_inter + total_left_stay
+            left_stay = [pre_cal['stay time'][loop_i] for loop_i in left_ind]
+            total_left_stay = sum(left_stay)
+            min_stay = min(left_stay)
+            best_arr_time = np.array([min_last_to_left + min_stay + temp_i * (min_inter + min_stay) for temp_i
+                                      in range(left_nm)])
+            left_del_time = np.sort([pre_cal['delivery time'][temp_i] for temp_i in left_ind])
+            least_pun = np.sum(5.0 * (np.maximum(best_arr_time, left_del_time) - left_del_time))
+            adjust += min_last_to_left + (left_nm - 1) * min_inter + total_left_stay + least_pun
         if next_punish + r_aa[2][-1] + adjust < best_obj:
             test_r, best_obj = bb_tsp(r_aa, allo, und_aa, time_lim, best_obj, False, next_punish, True, pre_cal)
             if not (test_r is None):
                 final_r = test_r
-    '''
-    if final_r is None:
-        print('rfinal: ' + str(final_r))
-    else:
-        print('rfinal: ' + str(final_r[4][22:]))
-    print('final best obj: ' + str(best_obj))
-    print('now punish: ' + str(now_punish))
-    '''
     if out_obj:
         return final_r, best_obj
     return final_r
@@ -126,6 +121,8 @@ def route_node_merge(r, und_a, node, allo, max_load=140.0, time_lim=720, check_d
     # TP node=[node id, pack number, order id]
     # judge whether suitable to merge: max distance, max time, package capacity
     if und_a[0] + node[1] > max_load:
+        if cal_punish:
+            return False, [], [], np.inf
         return False, [], []
     if pre_cal is None:
         xa, ya = get_cor(r[4][-1], allo, int(r[3][-1] < 0))
