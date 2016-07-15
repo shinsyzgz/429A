@@ -3,8 +3,9 @@ import copy
 
 # Constant: speed is the car speed. MERGE_MAX_DISTANCE is the max distance to merge
 SPEED = 250.0
-MERGE_MAX_DISTANCE = 45000
-SITE_END_TIME = 720
+MERGE_MAX_DISTANCE = 45000.0
+SITE_END_TIME = 720.0
+MAX_LOADS = 140.0
 
 
 def merge_two(route_a, route_b, all_orders, last_a=-1, last_b=-1, undelivered_a=None, undelivered_b=None,
@@ -62,32 +63,52 @@ def try_next(res_routes, ra, rb, allo, und_a, last_b, max_load=140, time_lim=720
     return
 
 
-def bb_tsp(r, allo, und_a, time_lim=720):
+def bb_tsp(r, allo, und_a, time_lim=720, best_obj=np.inf, append_und=True, now_punish=0.0, out_obj=False):
     # append [last_a, und_a] to r
-    last_a = len(r[0]) - 1
-    if len(r) == 5:
-        r.append([last_a, und_a])
-    elif len(r) > 5:
-        r[5] = [last_a, und_a]
+    print('r: ' + str(r[4][22:]))
+    if append_und:
+        last_a = len(r[0]) - 1
+        if len(r) == 5:
+            r.append([last_a, und_a])
+        elif len(r) > 5:
+            r[5] = [last_a, und_a]
+        else:
+            raise Exception('Wrong element in the route: ' + str(r))
+    if und_a[0] <= 0:
+        # no further delivery
+        return r, r[2][-1] + now_punish
+    final_r = None
+    for de_or_id in und_a[1]:
+        de_id, de_pck = allo.at[de_or_id, 'dest_id'], -allo.at[de_or_id, 'num']
+        is_suc, r_aa, und_aa, punish = route_node_merge(r, und_a, [de_id, de_pck, de_or_id], allo,
+                                                        MAX_LOADS, time_lim, False, True)
+        next_punish = now_punish + punish
+        if next_punish + r_aa[2][-1] < best_obj:
+            test_r, best_obj = bb_tsp(r_aa, allo, und_aa, time_lim, best_obj, False, next_punish, True)
+            if not (test_r is None):
+                final_r = test_r
+    if final_r is None:
+        print('rfinal: ' + str(final_r))
     else:
-        raise Exception('Wrong element in the route: ' + str(r))
-    # TBA find the minimum delivery use a branch and bound method
-    best_obj = np.inf
-    return r
+        print('rfinal: ' + str(final_r[4][22:]))
+    if out_obj:
+        return final_r, best_obj
+    return final_r
 
 
-def route_node_merge(r, und_a, node, allo, max_load=140, time_lim=720):
+def route_node_merge(r, und_a, node, allo, max_load=140.0, time_lim=720, check_dis_time=True, cal_punish=False):
     # node=[node id, pack number, order id]
     # judge whether suitable to merge: max distance, max time, package capacity
     if und_a[0] + node[1] > max_load:
         return False, [], []
     xa, ya = get_cor(r[4][-1], allo, int(r[3][-1] < 0))
-    arr_t, lea_t, info = time_update(node[2], node[1], np.round(r[2][-1]), xa, ya, allo)
+    arr_t, lea_t, info = time_update(node[2], node[1], np.round(r[2][-1]), xa, ya, allo, cal_punish)
     xn, yn, dis = info[:3]
-    if dis > MERGE_MAX_DISTANCE:
-        return False, [], []
-    if arr_t > time_lim:
-        return False, [], []
+    if check_dis_time:
+        if dis > MERGE_MAX_DISTANCE:
+            return False, [], []
+        if arr_t > time_lim:
+            return False, [], []
     m_r = copy.deepcopy(r)
     m_und = copy.deepcopy(und_a)
     # merge the node; remember deepcopy r and und_a; first calculate the time; then append m_r, then edit m_und
@@ -103,11 +124,13 @@ def route_node_merge(r, und_a, node, allo, max_load=140, time_lim=720):
     else:
         # pickup, add in m_und
         m_und[1].append(node[2])
+    if cal_punish:
+        return True, m_r, m_und, info[3]
     return True, m_r, m_und
 
 
 def find_last(r):
-    # find the position of the last pickup node
+    # TP find the position of the last pickup node
     # return -1 if no pickup
     # 0 package number takes as pickup
     pn = r[3]
@@ -116,25 +139,28 @@ def find_last(r):
     o_id = []
     while last >= 0 > pn[last]:
         pkn -= pn[last]
-        o_id.append(r[4][last])
+        o_id.insert(0, r[4][last])
         last -= 1
     return last, [pkn, o_id]
 
 
 def stay_time(pack_num):
+    # TP
     return np.round(3.0*np.sqrt(pack_num)+5.0)
 
 
 def node_dis(ox, oy, dx, dy):
+    # TP
     return np.sqrt((ox-dx)**2+(oy-dy)**2)
 
 
 def travel_time(dis, speed=SPEED):
+    # TP
     return np.round(dis/speed)
 
 
 def del_rep(ra, rb, allo, recalculate_time=True):
-    # delete repeat order in rb respect to ra without changing rb
+    # TP delete repeat order in rb respect to ra without changing rb
     nids = []
     arr = []
     lea = []
@@ -155,8 +181,8 @@ def del_rep(ra, rb, allo, recalculate_time=True):
     return nrb
 
 
-def recal_time(r, allo):
-    # recalculate time in route r, and changing r itself
+def recal_time(r, allo, cal_punish=False):
+    # TP recalculate time in route r, and changing r itself
     # not counting the case that start with an O2O
     rl = len(r[0])
     if rl <= 0:
@@ -166,20 +192,28 @@ def recal_time(r, allo):
     arr = [0.0]
     lea = [0.0]
     xl, yl = get_cor(r[4][0], allo)
+    total_punish = 0.0
+    punish = [0.0]
     for i in range(1, rl):
         last_leave = np.round(lea[i-1])
         pck_num = r[3][i]
         ord_id = r[4][i]
-        arr_time, lea_time, info = time_update(ord_id, pck_num, last_leave, xl, yl, allo)
+        arr_time, lea_time, info = time_update(ord_id, pck_num, last_leave, xl, yl, allo, cal_punish)
         xl, yl = info[:2]
+        if cal_punish:
+            punish.append(info[3])
+            total_punish += info[3]
         arr.append(arr_time)
         lea.append(lea_time)
     r[1] = arr
     r[2] = lea
+    if cal_punish:
+        return r, (total_punish, punish)
     return r
 
 
-def time_update(ord_id, pck_num, last_leave_time, last_x, last_y, allo, cal_punish = False):
+def time_update(ord_id, pck_num, last_leave_time, last_x, last_y, allo, cal_punish=False):
+    # TP
     if pck_num < 0:
         # delivery, arr = last + travel, leave=arr+holding
         xd, yd = get_cor(ord_id, allo, 1)
@@ -216,7 +250,7 @@ def time_update(ord_id, pck_num, last_leave_time, last_x, last_y, allo, cal_puni
 
 
 def get_cor(order_id, allo, o_type=0):
-    # type=0: pickup; else: delivery
+    # TP type=0: pickup; else: delivery
     if o_type == 0:
         return allo.at[order_id, 'ox'], allo.at[order_id, 'oy']
     return allo.at[order_id, 'dx'], allo.at[order_id, 'dy']
