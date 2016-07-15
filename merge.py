@@ -1,5 +1,6 @@
 import numpy as np
 import copy
+import scipy.spatial.distance as sci_dis
 
 # Constant: speed is the car speed. MERGE_MAX_DISTANCE is the max distance to merge
 SPEED = 250.0
@@ -43,7 +44,8 @@ def merge_order(ra, rb, all_orders, last_a, und_a, last_b, max_load=140, time_li
 def try_next(res_routes, ra, rb, allo, und_a, last_b, max_load=140, time_lim=720):
     # First judge if it's the end of a merge
     if last_b < 0:
-        ra = bb_tsp(ra, allo, und_a, time_lim)
+        pre_cal_res = generate_distance_time(ra, und_a, allo)
+        ra = bb_tsp(ra, allo, und_a, time_lim, pre_cal=pre_cal_res)
         res_routes.append(ra)
         return
     # try combine the following node in rb
@@ -63,9 +65,12 @@ def try_next(res_routes, ra, rb, allo, und_a, last_b, max_load=140, time_lim=720
     return
 
 
-def bb_tsp(r, allo, und_a, time_lim=720, best_obj=np.inf, append_und=True, now_punish=0.0, out_obj=False):
-    # append [last_a, und_a] to r
-    print('r: ' + str(r[4][22:]))
+def bb_tsp(r, allo, und_a, time_lim=720, best_obj=np.inf, append_und=True, now_punish=0.0, out_obj=False, pre_cal=None):
+    # TP append [last_a, und_a] to r
+    # print('r: ' + str(r[4][22:]))
+    # print('best obj: ' + str(best_obj))
+    # print('punish: ' + str(now_punish))
+    # print(r[1][-1])
     if append_und:
         last_a = len(r[0]) - 1
         if len(r) == 5:
@@ -79,31 +84,55 @@ def bb_tsp(r, allo, und_a, time_lim=720, best_obj=np.inf, append_und=True, now_p
         return r, r[2][-1] + now_punish
     final_r = None
     for de_or_id in und_a[1]:
-        de_id, de_pck = allo.at[de_or_id, 'dest_id'], -allo.at[de_or_id, 'num']
+        if pre_cal is None:
+            de_id, de_pck = allo.at[de_or_id, 'dest_id'], -allo.at[de_or_id, 'num']
+        else:
+            temp_ind = pre_cal['index'][de_or_id + 'd']
+            de_id, de_pck = pre_cal['node ID'][temp_ind], pre_cal['package num'][temp_ind]
         is_suc, r_aa, und_aa, punish = route_node_merge(r, und_a, [de_id, de_pck, de_or_id], allo,
-                                                        MAX_LOADS, time_lim, False, True)
+                                                        MAX_LOADS, time_lim, False, True, pre_cal)
         next_punish = now_punish + punish
-        if next_punish + r_aa[2][-1] < best_obj:
-            test_r, best_obj = bb_tsp(r_aa, allo, und_aa, time_lim, best_obj, False, next_punish, True)
+        adjust = 0.0
+        if (not (pre_cal is None)) and len(und_aa[1]) > 0:
+            left_ind = [pre_cal['index'][ttoid + 'd'] for ttoid in und_aa[1]]
+            temp_last_ind = pre_cal['index'][r_aa[4][-1] + 'd']
+            min_last_to_left = min([pre_cal['travel time'][temp_last_ind][loop_i] for loop_i in left_ind])
+            left_nm = len(und_aa[1])
+            min_inter = 0.0
+            if left_nm > 1:
+                min_inter = min([pre_cal['travel time'][loop_i][loop_j] for loop_i in left_ind for loop_j in left_ind
+                                if loop_i > loop_j])
+            total_left_stay = sum([pre_cal['stay time'][loop_i] for loop_i in left_ind])
+            adjust += min_last_to_left + (left_nm - 1) * min_inter + total_left_stay
+        if next_punish + r_aa[2][-1] + adjust < best_obj:
+            test_r, best_obj = bb_tsp(r_aa, allo, und_aa, time_lim, best_obj, False, next_punish, True, pre_cal)
             if not (test_r is None):
                 final_r = test_r
+    '''
     if final_r is None:
         print('rfinal: ' + str(final_r))
     else:
         print('rfinal: ' + str(final_r[4][22:]))
+    print('final best obj: ' + str(best_obj))
+    print('now punish: ' + str(now_punish))
+    '''
     if out_obj:
         return final_r, best_obj
     return final_r
 
 
-def route_node_merge(r, und_a, node, allo, max_load=140.0, time_lim=720, check_dis_time=True, cal_punish=False):
-    # node=[node id, pack number, order id]
+def route_node_merge(r, und_a, node, allo, max_load=140.0, time_lim=720, check_dis_time=True, cal_punish=False,
+                     pre_cal=None):
+    # TP node=[node id, pack number, order id]
     # judge whether suitable to merge: max distance, max time, package capacity
     if und_a[0] + node[1] > max_load:
         return False, [], []
-    xa, ya = get_cor(r[4][-1], allo, int(r[3][-1] < 0))
-    arr_t, lea_t, info = time_update(node[2], node[1], np.round(r[2][-1]), xa, ya, allo, cal_punish)
-    xn, yn, dis = info[:3]
+    if pre_cal is None:
+        xa, ya = get_cor(r[4][-1], allo, int(r[3][-1] < 0))
+        arr_t, lea_t, info = time_update(node[2], node[1], np.round(r[2][-1]), xa, ya, allo, cal_punish)
+    else:
+        arr_t, lea_t, info = quick_time_update(node[2], np.round(r[2][-1]), r[4][-1], r[3][-1], pre_cal, cal_punish)
+    dis = info[2]
     if check_dis_time:
         if dis > MERGE_MAX_DISTANCE:
             return False, [], []
@@ -249,8 +278,54 @@ def time_update(ord_id, pck_num, last_leave_time, last_x, last_y, allo, cal_puni
         return arr_time, lea_time, (xd, yd, dist, punish)
 
 
+def quick_time_update(ord_id, last_leave_time, last_oid, last_pck, info, cal_punish=False):
+    # TP only for delivery
+    n_oid, last_n_oid = ord_id + 'd', last_oid
+    if last_pck < 0:
+        last_n_oid += 'd'
+    else:
+        last_n_oid += 'p'
+    index = info['index'][n_oid]
+    last_index = info['index'][last_n_oid]
+    arr_time = last_leave_time + info['travel time'][last_index][index]
+    lea_time = arr_time + info['stay time'][index]
+    punish = 0.0
+    if cal_punish:
+        if arr_time > info['delivery time'][index]:
+            punish = 5.0 * (arr_time - info['delivery time'][index])
+    return arr_time, lea_time, (0, 0, info['distance'][last_index][index], punish)
+
+
 def get_cor(order_id, allo, o_type=0):
     # TP type=0: pickup; else: delivery
     if o_type == 0:
         return allo.at[order_id, 'ox'], allo.at[order_id, 'oy']
     return allo.at[order_id, 'dx'], allo.at[order_id, 'dy']
+
+
+def generate_distance_time(r, und, allo):
+    # TP
+    nodes = [r[0][-1]] + [allo.at[oid, 'dest_id'] for oid in und[1]]
+    pcks = [0.0] + [-allo.at[oid, 'num'] for oid in und[1]]
+    st_time = [0.0] + [stay_time(-pkn) for pkn in pcks[1:]]
+    deli_time = [0.0]
+    for oid in und[1]:
+        if allo.at[oid, 'order_type'] == 0:
+            deli_time.append(SITE_END_TIME)
+        else:
+            deli_time.append(allo.at[oid, 'delivery_time'])
+    n_oid, xy_c = [], []
+    if r[3][-1] < 0:
+        n_oid.append(r[4][-1] + 'd')
+        xy_c.append((allo.at[r[4][-1], 'dx'], allo.at[r[4][-1], 'dy']))
+    else:
+        n_oid.append(r[4][-1] + 'p')
+        xy_c.append((allo.at[r[4][-1], 'ox'], allo.at[r[4][-1], 'oy']))
+    for oid in und[1]:
+        n_oid.append(oid + 'd')
+        xy_c.append((allo.at[oid, 'dx'], allo.at[oid, 'dy']))
+    index_dic = {n_oid[i]: i for i in range(len(n_oid))}
+    dis_m = sci_dis.cdist(xy_c, xy_c, 'euclidean')
+    tra_time_m = travel_time(dis_m)
+    return {'distance': dis_m, 'travel time': tra_time_m, 'stay time': st_time, 'node ID': nodes, 'package num': pcks,
+            'delivery time': deli_time, 'index': index_dic}
