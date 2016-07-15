@@ -4,9 +4,11 @@ import copy
 # Constant: speed is the car speed. MERGE_MAX_DISTANCE is the max distance to merge
 SPEED = 250.0
 MERGE_MAX_DISTANCE = 45000
+SITE_END_TIME = 720
 
 
-def merge_two(route_a, route_b, all_orders, last_a=-1, last_b=-1, undelivered_a=[], undelivered_b=[], max_load=140, time_lim=720):
+def merge_two(route_a, route_b, all_orders, last_a=-1, last_b=-1, undelivered_a=None, undelivered_b=None,
+              max_load=140, time_lim=720):
     # route=[noteIDs, arrive minutes, leave minutes, package numbers, order IDs, [last_a, undelivered_a](optional)]
     # last_a and last_b denote the last pickup nodes in the routes
     # undelivered = [package number left, [list of order IDs left]]
@@ -23,12 +25,12 @@ def merge_two(route_a, route_b, all_orders, last_a=-1, last_b=-1, undelivered_a=
 
 def merge_order(ra, rb, all_orders, last_a, und_a, last_b, max_load=140, time_lim=720):
     # und_a = [pck n left, [list of order IDs left]]
-    if len(ra[0] <= 0):
+    if len(ra[0]) <= 0:
         # no new route generated
         return []
     # first renew rb to delete repeated node
     nrb = del_rep(ra, rb, all_orders, False)
-    if len(nrb[0] <= 0):
+    if len(nrb[0]) <= 0:
         # no new route generated
         return []
     merge_r = []
@@ -61,7 +63,16 @@ def try_next(res_routes, ra, rb, allo, und_a, last_b, max_load=140, time_lim=720
 
 
 def bb_tsp(r, allo, und_a, time_lim=720):
-    # TBA find the minimum delivery; remember to append [last_a, und_a] to r
+    # append [last_a, und_a] to r
+    last_a = len(r[0]) - 1
+    if len(r) == 5:
+        r.append([last_a, und_a])
+    elif len(r) > 5:
+        r[5] = [last_a, und_a]
+    else:
+        raise Exception('Wrong element in the route: ' + str(r))
+    # TBA find the minimum delivery use a branch and bound method
+    best_obj = np.inf
     return r
 
 
@@ -71,15 +82,27 @@ def route_node_merge(r, und_a, node, allo, max_load=140, time_lim=720):
     if und_a[0] + node[1] > max_load:
         return False, [], []
     xa, ya = get_cor(r[4][-1], allo, int(r[3][-1] < 0))
-    xn, yn = get_cor(node[2], allo, int(node[1] < 0))
-    dis = node_dis(xa, ya, xn, yn)
+    arr_t, lea_t, info = time_update(node[2], node[1], np.round(r[2][-1]), xa, ya, allo)
+    xn, yn, dis = info[:3]
     if dis > MERGE_MAX_DISTANCE:
         return False, [], []
-    if np.round(r[2][-1]) + np.round(dis/SPEED) > time_lim:
+    if arr_t > time_lim:
         return False, [], []
     m_r = copy.deepcopy(r)
     m_und = copy.deepcopy(und_a)
-    # TBA merge the node; remember deepcopy r and und_a
+    # merge the node; remember deepcopy r and und_a; first calculate the time; then append m_r, then edit m_und
+    m_r[0].append(node[0])
+    m_r[1].append(arr_t)
+    m_r[2].append(lea_t)
+    m_r[3].append(node[1])
+    m_r[4].append(node[2])
+    m_und[0] += node[1]
+    if node[1] < 0:
+        # deliver, delete in m_und
+        m_und[1].remove(node[2])
+    else:
+        # pickup, add in m_und
+        m_und[1].append(node[2])
     return True, m_r, m_und
 
 
@@ -147,7 +170,8 @@ def recal_time(r, allo):
         last_leave = np.round(lea[i-1])
         pck_num = r[3][i]
         ord_id = r[4][i]
-        arr_time, lea_time, xl, yl = time_update(ord_id, pck_num, last_leave, xl, yl, allo)
+        arr_time, lea_time, info = time_update(ord_id, pck_num, last_leave, xl, yl, allo)
+        xl, yl = info[:2]
         arr.append(arr_time)
         lea.append(lea_time)
     r[1] = arr
@@ -155,25 +179,40 @@ def recal_time(r, allo):
     return r
 
 
-def time_update(ord_id, pck_num, last_leave_time, last_x, last_y, allo):
+def time_update(ord_id, pck_num, last_leave_time, last_x, last_y, allo, cal_punish = False):
     if pck_num < 0:
         # delivery, arr = last + travel, leave=arr+holding
         xd, yd = get_cor(ord_id, allo, 1)
-        arr_time = last_leave_time + travel_time(node_dis(last_x, last_y, xd, yd))
+        dist = node_dis(last_x, last_y, xd, yd)
+        arr_time = last_leave_time + travel_time(dist)
         lea_time = arr_time + stay_time(-pck_num)
-        return arr_time, lea_time, xd, yd
+        punish = 0.0
+        if cal_punish:
+            if allo.at[ord_id, 'order_type'] == 0:
+                del_time = SITE_END_TIME
+            else:
+                del_time = allo.at[ord_id, 'delivery_time']
+            if arr_time > del_time:
+                punish = 5.0 * (arr_time - del_time)
+        return arr_time, lea_time, (xd, yd, dist, punish)
     elif allo.at[ord_id, 'order_type'] == 0:
         # pickup at site, arr=last+travel, leave=arr
         xd, yd = get_cor(ord_id, allo, 0)
-        arr_time = last_leave_time + travel_time(node_dis(last_x, last_y, xd, yd))
+        dist = node_dis(last_x, last_y, xd, yd)
+        arr_time = last_leave_time + travel_time(dist)
         lea_time = arr_time + 0.0
-        return arr_time, lea_time, xd, yd
+        return arr_time, lea_time, (xd, yd, dist, 0.0)
     else:
         # pickup at O2O, arr_time = (last + travel), leave_time = max(arr_time, pickup time) remember round
         xd, yd = get_cor(ord_id, allo, 0)
-        arr_time = last_leave_time + travel_time(node_dis(last_x, last_y, xd, yd))
-        lea_time = max(arr_time, allo.at[ord_id, 'pickup_time'])
-        return arr_time, lea_time, xd, yd
+        dist = node_dis(last_x, last_y, xd, yd)
+        arr_time = last_leave_time + travel_time(dist)
+        pick_time = allo.at[ord_id, 'pickup_time']
+        lea_time = max(arr_time, pick_time)
+        punish = 0.0
+        if cal_punish and arr_time > pick_time:
+            punish = 5.0 * (arr_time - pick_time)
+        return arr_time, lea_time, (xd, yd, dist, punish)
 
 
 def get_cor(order_id, allo, o_type=0):
