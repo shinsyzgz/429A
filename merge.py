@@ -7,11 +7,56 @@ SPEED = 250.0
 MERGE_MAX_DISTANCE = 45000.0
 SITE_END_TIME = 720.0
 MAX_LOADS = 140.0
+EXCEED_TIME_LIM = 40.0
+
+
+def merge_set(all_orders, routes_set_a, routes_set_b=None, most_merge=np.inf,
+              max_load=MAX_LOADS, time_lim=EXCEED_TIME_LIM, find_l=True, recalculate_time=True, check_feasible=True):
+    # TP merge set A and set B. If only one set is input, merge itself
+    exchange = True
+    if find_l:
+        for r in routes_set_a:
+            last_t, und_a = find_last(r)
+            append_to_route(r, [last_t, und_a])
+            if recalculate_time:
+                recal_time(r, all_orders)
+            if check_feasible:
+                if not check_route_feasible(r, max_load):
+                    raise Exception('Route load infeasible: ' + str(r))
+        if not (routes_set_b is None):
+            for r in routes_set_b:
+                last_t, und_a = find_last(r)
+                append_to_route(r, [last_t, und_a])
+                if recalculate_time:
+                    recal_time(r, all_orders)
+                if check_feasible:
+                    if not check_route_feasible(r, max_load):
+                        raise Exception('Route load infeasible: ' + str(r))
+    if routes_set_b is None:
+        exchange = False
+        routes_set_b = routes_set_a
+    set_am = []
+    for ra in routes_set_a:
+        for rb in routes_set_b:
+            if len(ra) > 5:
+                if len(rb) > 5:
+                    set_am += merge_two(ra, rb, all_orders, ra[5][0], rb[5][0], ra[5][1], rb[5][1],
+                                        max_load, time_lim, most_merge, exchange)
+                else:
+                    set_am += merge_two(ra, rb, all_orders, ra[5][0], undelivered_a=ra[5][1], max_load=max_load,
+                                        time_lim=time_lim, most_merge=most_merge, exchange=exchange)
+            elif len(rb) > 5:
+                set_am += merge_two(ra, rb, all_orders, last_b=rb[5][0], undelivered_b=rb[5][1], max_load=max_load,
+                                    time_lim=time_lim, most_merge=most_merge, exchange=exchange)
+            else:
+                set_am += merge_two(ra, rb, all_orders, max_load=max_load, time_lim=time_lim,
+                                    most_merge=most_merge, exchange=exchange)
+    return set_am
 
 
 def merge_two(route_a, route_b, all_orders, last_a=-1, last_b=-1, undelivered_a=None, undelivered_b=None,
-              max_load=140, time_lim=720, most_merge=np.inf):
-    # TA route=[noteIDs, arrive minutes, leave minutes, package numbers, order IDs, [last_a, undelivered_a](optional)]
+              max_load=MAX_LOADS, time_lim=EXCEED_TIME_LIM, most_merge=np.inf, exchange=True):
+    # TP route=[noteIDs, arrive minutes, leave minutes, package numbers, order IDs, [last_a, undelivered_a](optional)]
     # last_a and last_b denote the last pickup nodes in the routes
     # undelivered = [package number left, [list of order IDs left]]
     # all_orders is pandas object; time_lim is the time limit to exceed pickup/delivery time
@@ -20,11 +65,13 @@ def merge_two(route_a, route_b, all_orders, last_a=-1, last_b=-1, undelivered_a=
         last_a, undelivered_a = find_last(route_a)
     if last_b == -1:
         last_b, undelivered_b = find_last(route_b)
-    return (merge_order(route_a, route_b, all_orders, last_a, undelivered_a, max_load, time_lim, most_merge) +
-            merge_order(route_b, route_a, all_orders, last_b, undelivered_b, max_load, time_lim, most_merge))
+    if exchange:
+        return (merge_order(route_a, route_b, all_orders, last_a, undelivered_a, max_load, time_lim, most_merge) +
+                merge_order(route_b, route_a, all_orders, last_b, undelivered_b, max_load, time_lim, most_merge))
+    return merge_order(route_a, route_b, all_orders, last_a, undelivered_a, max_load, time_lim, most_merge)
 
 
-def merge_order(ra, rb, all_orders, last_a, und_a, max_load=140, time_lim=720, most_merge=np.inf):
+def merge_order(ra, rb, all_orders, last_a, und_a, max_load=MAX_LOADS, time_lim=EXCEED_TIME_LIM, most_merge=np.inf):
     # TP und_a = [pck n left, [list of order IDs left]]
     if len(ra[0]) <= 0:
         # no new route generated
@@ -38,13 +85,15 @@ def merge_order(ra, rb, all_orders, last_a, und_a, max_load=140, time_lim=720, m
     merge_r = []
     temp_ra = [ra[0][:(last_a+1)], ra[1][:(last_a+1)], ra[2][:(last_a+1)], ra[3][:(last_a+1)], ra[4][:(last_a+1)]]
     try_next(merge_r, ra, nrb, all_orders, [0, []], [0, []], len(nrb[0]) - 1, max_load, time_lim, most_merge)
-    hard_m_last, hard_m_und = find_last(merge_r[0])
-    merge_r[0][5] = [hard_m_last, hard_m_und]
+    if len(merge_r) > 0:
+        hard_m_last, hard_m_und = find_last(merge_r[0])
+        merge_r[0][5] = [hard_m_last, hard_m_und]
     try_next(merge_r, temp_ra, nrb, all_orders, und_a, und_a, last_bb, max_load, time_lim, most_merge)
     return merge_r
 
 
-def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=140, time_lim=720, most_merge=np.inf):
+def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOADS, time_lim=EXCEED_TIME_LIM,
+             most_merge=np.inf):
     # TP First judge if it's the end of a merge
     if len(res_routes) >= most_merge:
         return
@@ -73,16 +122,12 @@ def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=140, tim
     return
 
 
-def bb_tsp(r, allo, und_a, time_lim=720, best_obj=np.inf, append_und=True, now_punish=0.0, out_obj=False, pre_cal=None):
+def bb_tsp(r, allo, und_a, time_lim=EXCEED_TIME_LIM, best_obj=np.inf, append_und=True,
+           now_punish=0.0, out_obj=False, pre_cal=None):
     # TP append [last_a, und_a] to r
     if append_und:
         last_a = len(r[0]) - 1
-        if len(r) == 5:
-            r.append([last_a, und_a])
-        elif len(r) > 5:
-            r[5] = [last_a, und_a]
-        else:
-            raise Exception('Wrong element in the route: ' + str(r))
+        append_to_route(r, [last_a, und_a])
     if und_a[0] <= 0:
         # no further delivery
         if out_obj:
@@ -127,8 +172,8 @@ def bb_tsp(r, allo, und_a, time_lim=720, best_obj=np.inf, append_und=True, now_p
     return final_r
 
 
-def route_node_merge(r, und_a, node, allo, max_load=140.0, time_lim=720, check_dis_time=True, cal_punish=False,
-                     pre_cal=None):
+def route_node_merge(r, und_a, node, allo, max_load=MAX_LOADS, time_lim=EXCEED_TIME_LIM,
+                     check_dis_time=True, cal_punish=False, pre_cal=None):
     # TP node=[node id, pack number, order id]
     # judge whether suitable to merge: max distance, max time, package capacity
     if und_a[0] + node[1] > max_load:
@@ -337,3 +382,23 @@ def generate_distance_time(r, und, allo):
     tra_time_m = travel_time(dis_m)
     return {'distance': dis_m, 'travel time': tra_time_m, 'stay time': st_time, 'node ID': nodes, 'package num': pcks,
             'delivery time': deli_time, 'index': index_dic}
+
+
+def append_to_route(r, app):
+    # TP
+    if len(r) == 5:
+        r.append(app)
+    elif len(r) > 5:
+        r[5] = app
+    else:
+        raise Exception('Wrong element in the route: ' + str(r))
+
+
+def check_route_feasible(r, load_max=MAX_LOADS):
+    # TP
+    all_pck = 0.0
+    for pck in r[3]:
+        all_pck += pck
+        if all_pck > load_max or all_pck < 0:
+            return False
+    return True
