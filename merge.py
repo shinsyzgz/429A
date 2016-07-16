@@ -10,57 +10,66 @@ MAX_LOADS = 140.0
 
 
 def merge_two(route_a, route_b, all_orders, last_a=-1, last_b=-1, undelivered_a=None, undelivered_b=None,
-              max_load=140, time_lim=720):
-    # route=[noteIDs, arrive minutes, leave minutes, package numbers, order IDs, [last_a, undelivered_a](optional)]
+              max_load=140, time_lim=720, most_merge=np.inf):
+    # TA route=[noteIDs, arrive minutes, leave minutes, package numbers, order IDs, [last_a, undelivered_a](optional)]
     # last_a and last_b denote the last pickup nodes in the routes
     # undelivered = [package number left, [list of order IDs left]]
-    # all_orders is pandas object
+    # all_orders is pandas object; time_lim is the time limit to exceed pickup/delivery time
     # first found the last site to obtain packages if last=-1, because the route always end with dispatching packages
     if last_a == -1:
         last_a, undelivered_a = find_last(route_a)
     if last_b == -1:
         last_b, undelivered_b = find_last(route_b)
-    return (merge_order(route_a, route_b, all_orders, last_a, undelivered_a, last_b, max_load, time_lim) +
-            merge_order(route_b, route_a, all_orders, last_b, undelivered_b, last_a, max_load, time_lim))
+    return (merge_order(route_a, route_b, all_orders, last_a, undelivered_a, max_load, time_lim, most_merge) +
+            merge_order(route_b, route_a, all_orders, last_b, undelivered_b, max_load, time_lim, most_merge))
 
 
-def merge_order(ra, rb, all_orders, last_a, und_a, last_b, max_load=140, time_lim=720):
-    # und_a = [pck n left, [list of order IDs left]]
+def merge_order(ra, rb, all_orders, last_a, und_a, max_load=140, time_lim=720, most_merge=np.inf):
+    # TP und_a = [pck n left, [list of order IDs left]]
     if len(ra[0]) <= 0:
         # no new route generated
         return []
     # first renew rb to delete repeated node
     nrb = del_rep(ra, rb, all_orders, False)
+    last_bb, und_bb = find_last(nrb)
     if len(nrb[0]) <= 0:
         # no new route generated
         return []
     merge_r = []
     temp_ra = [ra[0][:(last_a+1)], ra[1][:(last_a+1)], ra[2][:(last_a+1)], ra[3][:(last_a+1)], ra[4][:(last_a+1)]]
-    try_next(merge_r, temp_ra, rb, all_orders, und_a, last_b, max_load, time_lim)
+    try_next(merge_r, ra, nrb, all_orders, [0, []], [0, []], len(nrb[0]) - 1, max_load, time_lim, most_merge)
+    hard_m_last, hard_m_und = find_last(merge_r[0])
+    merge_r[0][5] = [hard_m_last, hard_m_und]
+    try_next(merge_r, temp_ra, nrb, all_orders, und_a, und_a, last_bb, max_load, time_lim, most_merge)
     return merge_r
 
 
-def try_next(res_routes, ra, rb, allo, und_a, last_b, max_load=140, time_lim=720):
-    # First judge if it's the end of a merge
+def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=140, time_lim=720, most_merge=np.inf):
+    # TP First judge if it's the end of a merge
+    if len(res_routes) >= most_merge:
+        return
     if last_b < 0:
-        pre_cal_res = generate_distance_time(ra, und_a, allo)
-        ra = bb_tsp(ra, allo, und_a, time_lim, pre_cal=pre_cal_res)
+        pre_cal_res = generate_distance_time(ra, und_all, allo)
+        ra = bb_tsp(ra, allo, und_all, time_lim, pre_cal=pre_cal_res)
         res_routes.append(ra)
         return
     # try combine the following node in rb
     next_id, next_pck, next_oid = rb[0][0], rb[3][0], rb[4][0]
-    is_suc, r_ab, und_ab = route_node_merge(ra, und_a, [next_id, next_pck, next_oid], allo, max_load, time_lim)
+    is_suc, r_ab, und_ab = route_node_merge(ra, und_all, [next_id, next_pck, next_oid], allo, max_load, time_lim)
     if is_suc:
         new_rb = [rb[0][1:], [], [], rb[3][1:], rb[4][1:]]
-        try_next(res_routes, r_ab, new_rb, allo, und_ab, last_b-1, max_load, time_lim)
+        try_next(res_routes, r_ab, new_rb, allo, und_a, und_ab, last_b-1, max_load, time_lim, most_merge)
     elif und_a[0] <= 0:
         return
     # try combine the node in und_a
     for de_or_id in und_a[1]:
         de_id, de_pck = allo.at[de_or_id, 'dest_id'], -allo.at[de_or_id, 'num']
-        is_suc, r_aa, und_aa = route_node_merge(ra, und_a, [de_id, de_pck, de_or_id], allo, max_load, time_lim)
+        is_suc, r_aa, und_aa = route_node_merge(ra, und_all, [de_id, de_pck, de_or_id], allo, max_load, time_lim)
         if is_suc:
-            try_next(res_routes, r_aa, rb, allo, und_aa, last_b, max_load, time_lim)
+            und_acopy = copy.deepcopy(und_a[1])
+            und_acopy.remove(de_or_id)
+            try_next(res_routes, r_aa, rb, allo, [und_a[0] + de_pck, und_acopy],
+                     und_aa, last_b, max_load, time_lim, most_merge)
     return
 
 
@@ -76,7 +85,9 @@ def bb_tsp(r, allo, und_a, time_lim=720, best_obj=np.inf, append_und=True, now_p
             raise Exception('Wrong element in the route: ' + str(r))
     if und_a[0] <= 0:
         # no further delivery
-        return r, r[2][-1] + now_punish
+        if out_obj:
+            return r, r[2][-1] + now_punish
+        return r
     final_r = None
     for de_or_id in und_a[1]:
         if pre_cal is None:
@@ -133,7 +144,7 @@ def route_node_merge(r, und_a, node, allo, max_load=140.0, time_lim=720, check_d
     if check_dis_time:
         if dis > MERGE_MAX_DISTANCE:
             return False, [], []
-        if arr_t > time_lim:
+        if arr_t > time_lim + info[4]:
             return False, [], []
     m_r = copy.deepcopy(r)
     m_und = copy.deepcopy(und_a)
@@ -247,21 +258,21 @@ def time_update(ord_id, pck_num, last_leave_time, last_x, last_y, allo, cal_puni
         arr_time = last_leave_time + travel_time(dist)
         lea_time = arr_time + stay_time(-pck_num)
         punish = 0.0
+        if allo.at[ord_id, 'order_type'] == 0:
+            del_time = SITE_END_TIME
+        else:
+            del_time = allo.at[ord_id, 'delivery_time']
         if cal_punish:
-            if allo.at[ord_id, 'order_type'] == 0:
-                del_time = SITE_END_TIME
-            else:
-                del_time = allo.at[ord_id, 'delivery_time']
             if arr_time > del_time:
                 punish = 5.0 * (arr_time - del_time)
-        return arr_time, lea_time, (xd, yd, dist, punish)
+        return arr_time, lea_time, (xd, yd, dist, punish, del_time)
     elif allo.at[ord_id, 'order_type'] == 0:
         # pickup at site, arr=last+travel, leave=arr
         xd, yd = get_cor(ord_id, allo, 0)
         dist = node_dis(last_x, last_y, xd, yd)
         arr_time = last_leave_time + travel_time(dist)
         lea_time = arr_time + 0.0
-        return arr_time, lea_time, (xd, yd, dist, 0.0)
+        return arr_time, lea_time, (xd, yd, dist, 0.0, SITE_END_TIME)
     else:
         # pickup at O2O, arr_time = (last + travel), leave_time = max(arr_time, pickup time) remember round
         xd, yd = get_cor(ord_id, allo, 0)
@@ -272,7 +283,7 @@ def time_update(ord_id, pck_num, last_leave_time, last_x, last_y, allo, cal_puni
         punish = 0.0
         if cal_punish and arr_time > pick_time:
             punish = 5.0 * (arr_time - pick_time)
-        return arr_time, lea_time, (xd, yd, dist, punish)
+        return arr_time, lea_time, (xd, yd, dist, punish, pick_time)
 
 
 def quick_time_update(ord_id, last_leave_time, last_oid, last_pck, info, cal_punish=False):

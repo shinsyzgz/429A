@@ -6,7 +6,29 @@ import numpy as np
 import copy
 
 
-def generate_route(allo, ord_num = 8):
+def gener_routes(allo, re_cal=False, find_last=False):
+    r1 = [['A083', 'A083', 'A083', 'A083', 'A083', 'B5800', 'B7555', 'B7182', 'B8307', 'B8461'], [], [],
+          [34, 11, 19, 12, 63, -34, -63, -12, -19, -11],
+          ['F6344', 'F6360', 'F6358', 'F6353', 'F6354', 'F6344', 'F6354', 'F6353', 'F6358', 'F6360']]
+    r2 = [['A083', 'A083', 'A083', 'B6528', 'S245', 'B3266', 'B3266', 'B2337'], [], [],
+          [46, 53, 39, -46, 1, -1, -53, -39],
+          ['F6349', 'F6325', 'F6314', 'F6349', 'E0895', 'E0895', 'F6325', 'F6314']]
+    r3 = [['A083', 'A083', 'A083', 'A083', 'S294', 'B1940', 'B6104', 'B8926', 'B9072', 'B6103'], [], [],
+          [36, 27, 36, 33, 1, -33, -36, -1, -36, -27],
+          ['F6366', 'F6345', 'F6346', 'F6308', 'E1088', 'F6308', 'F6346', 'E1088', 'F6366', 'F6345']]
+    if re_cal:
+        mg.recal_time(r1, allo)
+        mg.recal_time(r2, allo)
+        mg.recal_time(r3, allo)
+    if find_last:
+        last1, und1 = mg.find_last(r1)
+        last2, und2 = mg.find_last(r2)
+        last3, und3 = mg.find_last(r3)
+        return [r1, r2, r3], [(last1, und1), (last2, und2), (last3, und3)]
+    return [r1, r2, r3]
+
+
+def generate_route(allo, ord_num=8):
     ord_id = []
     for i in range(ord_num):
         ind = rdm.randint(0, len(allo) - 1)
