@@ -1,6 +1,7 @@
 import numpy as np
 import copy
 import scipy.spatial.distance as sci_dis
+import random as random
 
 # Constant: speed is the car speed. MERGE_MAX_DISTANCE is the max distance to merge
 SPEED = 250.0
@@ -10,8 +11,9 @@ MAX_LOADS = 140.0
 EXCEED_TIME_LIM = 40.0
 
 
-def merge_set(all_orders, routes_set_a, routes_set_b=None, most_merge=np.inf,
-              max_load=MAX_LOADS, time_lim=EXCEED_TIME_LIM, find_l=True, recalculate_time=True, check_feasible=True):
+def merge_set(all_orders, routes_set_a, routes_set_b=None, most_merge=np.inf, max_load=MAX_LOADS,
+              time_lim=EXCEED_TIME_LIM, find_l=True, recalculate_time=True, check_feasible=True,
+              full_iteration=(True, 0.0, 0.0)):
     # TP merge set A and set B. If only one set is input, merge itself
     exchange = True
     if find_l:
@@ -41,21 +43,25 @@ def merge_set(all_orders, routes_set_a, routes_set_b=None, most_merge=np.inf,
             if len(ra) > 5:
                 if len(rb) > 5:
                     set_am += merge_two(ra, rb, all_orders, ra[5][0], rb[5][0], ra[5][1], rb[5][1],
-                                        max_load, time_lim, most_merge, exchange)
+                                        max_load, time_lim, most_merge, exchange, full_iteration=full_iteration)
                 else:
                     set_am += merge_two(ra, rb, all_orders, ra[5][0], undelivered_a=ra[5][1], max_load=max_load,
-                                        time_lim=time_lim, most_merge=most_merge, exchange=exchange)
+                                        time_lim=time_lim, most_merge=most_merge, exchange=exchange,
+                                        full_iteration=full_iteration)
             elif len(rb) > 5:
                 set_am += merge_two(ra, rb, all_orders, last_b=rb[5][0], undelivered_b=rb[5][1], max_load=max_load,
-                                    time_lim=time_lim, most_merge=most_merge, exchange=exchange)
+                                    time_lim=time_lim, most_merge=most_merge, exchange=exchange,
+                                    full_iteration=full_iteration)
             else:
                 set_am += merge_two(ra, rb, all_orders, max_load=max_load, time_lim=time_lim,
-                                    most_merge=most_merge, exchange=exchange)
+                                    most_merge=most_merge, exchange=exchange,
+                                    full_iteration=full_iteration)
     return set_am
 
 
 def merge_two(route_a, route_b, all_orders, last_a=-1, last_b=-1, undelivered_a=None, undelivered_b=None,
-              max_load=MAX_LOADS, time_lim=EXCEED_TIME_LIM, most_merge=np.inf, exchange=True):
+              max_load=MAX_LOADS, time_lim=EXCEED_TIME_LIM, most_merge=np.inf, exchange=True,
+              full_iteration=(True, 0.0, 0.0)):
     # TP route=[noteIDs, arrive minutes, leave minutes, package numbers, order IDs, [last_a, undelivered_a](optional)]
     # last_a and last_b denote the last pickup nodes in the routes
     # undelivered = [package number left, [list of order IDs left]]
@@ -66,12 +72,16 @@ def merge_two(route_a, route_b, all_orders, last_a=-1, last_b=-1, undelivered_a=
     if last_b == -1:
         last_b, undelivered_b = find_last(route_b)
     if exchange:
-        return (merge_order(route_a, route_b, all_orders, last_a, undelivered_a, max_load, time_lim, most_merge) +
-                merge_order(route_b, route_a, all_orders, last_b, undelivered_b, max_load, time_lim, most_merge))
-    return merge_order(route_a, route_b, all_orders, last_a, undelivered_a, max_load, time_lim, most_merge)
+        return (merge_order(route_a, route_b, all_orders, last_a, undelivered_a, max_load, time_lim, most_merge,
+                            full_iteration=full_iteration) +
+                merge_order(route_b, route_a, all_orders, last_b, undelivered_b, max_load, time_lim, most_merge,
+                            full_iteration=full_iteration))
+    return merge_order(route_a, route_b, all_orders, last_a, undelivered_a, max_load, time_lim, most_merge,
+                       full_iteration=full_iteration)
 
 
-def merge_order(ra, rb, all_orders, last_a, und_a, max_load=MAX_LOADS, time_lim=EXCEED_TIME_LIM, most_merge=np.inf):
+def merge_order(ra, rb, all_orders, last_a, und_a, max_load=MAX_LOADS, time_lim=EXCEED_TIME_LIM, most_merge=np.inf,
+                full_iteration=(True, 0.0, 0.0)):
     # TP und_a = [pck n left, [list of order IDs left]]
     if len(ra[0]) <= 0:
         # no new route generated
@@ -88,13 +98,14 @@ def merge_order(ra, rb, all_orders, last_a, und_a, max_load=MAX_LOADS, time_lim=
     if len(merge_r) > 0:
         hard_m_last, hard_m_und = find_last(merge_r[0])
         merge_r[0][5] = [hard_m_last, hard_m_und]
-    try_next(merge_r, temp_ra, nrb, all_orders, und_a, und_a, last_bb, max_load, time_lim, most_merge)
+    try_next(merge_r, temp_ra, nrb, all_orders, und_a, und_a, last_bb, max_load, time_lim, most_merge,
+             full_iteration=full_iteration)
     return merge_r
 
 
 def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOADS, time_lim=EXCEED_TIME_LIM,
-             most_merge=np.inf):
-    # TP First judge if it's the end of a merge
+             most_merge=np.inf, full_iteration=(True, 0.0, 0.0)):
+    # TP First judge if it's the end of a merge; full_iteration=(Flag, most_n, rand_shuffle_num)
     if len(res_routes) >= most_merge:
         return
     if last_b < 0:
@@ -107,18 +118,45 @@ def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOAD
     is_suc, r_ab, und_ab = route_node_merge(ra, und_all, [next_id, next_pck, next_oid], allo, max_load, time_lim)
     if is_suc:
         new_rb = [rb[0][1:], [], [], rb[3][1:], rb[4][1:]]
-        try_next(res_routes, r_ab, new_rb, allo, und_a, und_ab, last_b-1, max_load, time_lim, most_merge)
+        try_next(res_routes, r_ab, new_rb, allo, und_a, und_ab, last_b-1, max_load, time_lim, most_merge,
+                 full_iteration)
     elif und_a[0] <= 0:
         return
     # try combine the node in und_a
-    for de_or_id in und_a[1]:
-        de_id, de_pck = allo.at[de_or_id, 'dest_id'], -allo.at[de_or_id, 'num']
-        is_suc, r_aa, und_aa = route_node_merge(ra, und_all, [de_id, de_pck, de_or_id], allo, max_load, time_lim)
-        if is_suc:
-            und_acopy = copy.deepcopy(und_a[1])
-            und_acopy.remove(de_or_id)
-            try_next(res_routes, r_aa, rb, allo, [und_a[0] + de_pck, und_acopy],
-                     und_aa, last_b, max_load, time_lim, most_merge)
+    if full_iteration[0] or full_iteration[1] >= len(und_a[1]):
+        for de_or_id in und_a[1]:
+            de_id, de_pck = allo.at[de_or_id, 'dest_id'], -allo.at[de_or_id, 'num']
+            is_suc, r_aa, und_aa = route_node_merge(ra, und_all, [de_id, de_pck, de_or_id], allo, max_load, time_lim)
+            if is_suc:
+                und_acopy = copy.deepcopy(und_a[1])
+                und_acopy.remove(de_or_id)
+                try_next(res_routes, r_aa, rb, allo, [und_a[0] + de_pck, und_acopy],
+                         und_aa, last_b, max_load, time_lim, most_merge, full_iteration)
+    else:
+        # first try the default order. then shuffle rand times
+        if len(und_a[1]) > 0:
+            de_or_id = und_a[1][0]
+            de_id, de_pck = allo.at[de_or_id, 'dest_id'], -allo.at[de_or_id, 'num']
+            is_suc, r_aa, und_aa = route_node_merge(ra, und_all, [de_id, de_pck, de_or_id], allo, max_load, time_lim)
+            if is_suc:
+                und_acopy = copy.deepcopy(und_a[1])
+                und_acopy.remove(de_or_id)
+                try_next(res_routes, r_aa, rb, allo, [und_a[0] + de_pck, und_acopy],
+                         und_aa, last_b, max_load, time_lim, most_merge, (False, 0.0, 0.0))
+            shuffle_time = 1
+            shuffle_und_a = copy.deepcopy(und_a[1])
+            while shuffle_time <= full_iteration[2]:
+                shuffle_time += 1
+                random.shuffle(shuffle_und_a)
+                de_or_id = shuffle_und_a[0]
+                de_id, de_pck = allo.at[de_or_id, 'dest_id'], -allo.at[de_or_id, 'num']
+                is_suc, r_aa, und_aa = route_node_merge(ra, und_all, [de_id, de_pck, de_or_id], allo, max_load,
+                                                        time_lim)
+                if is_suc:
+                    und_acopy = copy.deepcopy(shuffle_und_a)
+                    und_acopy.remove(de_or_id)
+                    try_next(res_routes, r_aa, rb, allo, [und_a[0] + de_pck, und_acopy],
+                             und_aa, last_b, max_load, time_lim, most_merge, (False, 0.0, 0.0))
     return
 
 

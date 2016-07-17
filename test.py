@@ -24,7 +24,10 @@ def gener_routes(allo, re_cal=False, find_last=False):
         last1, und1 = mg.find_last(r1)
         last2, und2 = mg.find_last(r2)
         last3, und3 = mg.find_last(r3)
-        return [r1, r2, r3], [(last1, und1), (last2, und2), (last3, und3)]
+        mg.append_to_route(r1, [last1, und1])
+        mg.append_to_route(r2, [last2, und2])
+        mg.append_to_route(r3, [last3, und3])
+        return [r1, r2, r3]
     return [r1, r2, r3]
 
 
