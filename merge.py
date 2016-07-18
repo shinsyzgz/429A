@@ -2,6 +2,7 @@ import numpy as np
 import copy
 import scipy.spatial.distance as sci_dis
 import random as random
+import pickle
 
 # Constant: speed is the car speed. MERGE_MAX_DISTANCE is the max distance to merge
 SPEED = 250.0
@@ -9,6 +10,8 @@ MERGE_MAX_DISTANCE = 45000.0
 SITE_END_TIME = 720.0
 MAX_LOADS = 140.0
 EXCEED_TIME_LIM = 40.0
+O2O_MINI_START = None
+# O2O_MINI_START = {o2o order id: (min pickup arr time, nearest site id)}
 
 
 def merge_set(all_orders, routes_set_a, routes_set_b=None, most_merge=np.inf, max_load=MAX_LOADS,
@@ -304,13 +307,20 @@ def del_rep(ra, rb, allo, recalculate_time=True):
 def recal_time(r, allo, cal_punish=False):
     # TP recalculate time in route r, and changing r itself
     # not counting the case that start with an O2O
+    global O2O_MINI_START
     rl = len(r[0])
     if rl <= 0:
         return r
     if r[3][0] < 0:
         raise Exception('Wrong route, not start with a pickup')
-    arr = [0.0]
-    lea = [0.0]
+    if allo.at[r[4][0], 'order_type'] == 0:
+        arr = [0.0]
+        lea = [0.0]
+    else:
+        if O2O_MINI_START is None:
+            O2O_MINI_START = generate_o2o_minimum_start(allo)
+        arr = [O2O_MINI_START[r[4][0]][0]]
+        lea = [max(arr[0], allo.at[r[4][0], 'pickup_time'])]
     xl, yl = get_cor(r[4][0], allo)
     total_punish = 0.0
     punish = [0.0]
@@ -440,3 +450,35 @@ def check_route_feasible(r, load_max=MAX_LOADS):
         if all_pck > load_max or all_pck < 0:
             return False
     return True
+
+
+def generate_o2o_minimum_start(allo):
+    # TP
+    print('Generate O2O start time...')
+    try:
+        input_dic = open('o2o_start', 'rb')
+    except IOError:
+        print('No file named o2o_start. Start generating...')
+        o2o_ord = allo[allo['order_type'] == 1]
+        site_ord = allo[allo['order_type'] == 0]
+        o2o_dict = {}
+        for o2o_order_id in o2o_ord['order_id']:
+            o2o_ox, o2o_oy = o2o_ord.at[o2o_order_id, 'ox'], o2o_ord.at[o2o_order_id, 'oy']
+            min_dis, near_site = np.inf, ''
+            for site_order_id in site_ord['order_id']:
+                site_ox, site_oy = site_ord.at[site_order_id, 'ox'], site_ord.at[site_order_id, 'oy']
+                dis = node_dis(site_ox, site_oy, o2o_ox, o2o_oy)
+                if dis < min_dis:
+                    min_dis, near_site = dis, site_ord.at[site_order_id, 'ori_id']
+            o2o_dict[o2o_order_id] = travel_time(min_dis), near_site
+        output = open('o2o_start', 'wb')
+        pickle.dump(o2o_dict, output)
+        output.close()
+        print('Generation completed')
+        return o2o_dict
+    else:
+        print('Find file o2o_start, load the file...')
+        o2o_dict = pickle.load(input_dic)
+        input_dic.close()
+        print('Load complete.')
+        return o2o_dict
