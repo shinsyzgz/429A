@@ -97,7 +97,8 @@ def merge_order(ra, rb, all_orders, last_a, und_a, max_load=MAX_LOADS, time_lim=
         return []
     merge_r = []
     temp_ra = [ra[0][:(last_a+1)], ra[1][:(last_a+1)], ra[2][:(last_a+1)], ra[3][:(last_a+1)], ra[4][:(last_a+1)]]
-    try_next(merge_r, ra, nrb, all_orders, [0, []], [0, []], len(nrb[0]) - 1, max_load, time_lim, most_merge)
+    try_next(merge_r, ra, nrb, all_orders, [0, []], [0, []], len(nrb[0]) - 1, max_load, time_lim, most_merge,
+             find_l=True)
     if len(merge_r) > 0:
         hard_m_last, hard_m_und = find_last(merge_r[0])
         merge_r[0][5] = [hard_m_last, hard_m_und]
@@ -107,13 +108,19 @@ def merge_order(ra, rb, all_orders, last_a, und_a, max_load=MAX_LOADS, time_lim=
 
 
 def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOADS, time_lim=EXCEED_TIME_LIM,
-             most_merge=np.inf, full_iteration=(True, 0.0, 0.0)):
+             most_merge=np.inf, full_iteration=(True, 0.0, 0.0), find_l=False):
     # TP First judge if it's the end of a merge; full_iteration=(Flag, most_n, rand_shuffle_num/n = (n-1)!)
     if len(res_routes) >= most_merge:
         return
     if last_b < 0:
         pre_cal_res = generate_distance_time(ra, und_all, allo)
-        ra = bb_tsp(ra, allo, und_all, time_lim, pre_cal=pre_cal_res)
+        append_last = len(ra[0]) - 1
+        ra = bb_tsp(ra, allo, und_all, time_lim, pre_cal=pre_cal_res, find_l=find_l, append_und=False)
+        if find_l:
+            append_last, append_und = find_last(ra)
+        else:
+            append_und = [und_all[0], ra[4][append_last + 1:]]
+        append_to_route(ra, [append_last, append_und])
         res_routes.append(ra)
         return
     # try combine the following node in rb
@@ -122,7 +129,7 @@ def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOAD
     if is_suc:
         new_rb = [rb[0][1:], [], [], rb[3][1:], rb[4][1:]]
         try_next(res_routes, r_ab, new_rb, allo, und_a, und_ab, last_b-1, max_load, time_lim, most_merge,
-                 full_iteration)
+                 full_iteration, find_l=find_l)
     elif und_a[0] <= 0:
         return
     # try combine the node in und_a
@@ -134,7 +141,7 @@ def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOAD
                 und_acopy = copy.deepcopy(und_a[1])
                 und_acopy.remove(de_or_id)
                 try_next(res_routes, r_aa, rb, allo, [und_a[0] + de_pck, und_acopy],
-                         und_aa, last_b, max_load, time_lim, most_merge, full_iteration)
+                         und_aa, last_b, max_load, time_lim, most_merge, full_iteration, find_l=find_l)
     else:
         # first try the default order. then shuffle rand times
         len_und_a = len(und_a[1])
@@ -146,7 +153,7 @@ def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOAD
                 und_acopy = copy.deepcopy(und_a[1])
                 und_acopy.remove(de_or_id)
                 try_next(res_routes, r_aa, rb, allo, [und_a[0] + de_pck, und_acopy],
-                         und_aa, last_b, max_load, time_lim, most_merge, (False, 0.0, 0.0))
+                         und_aa, last_b, max_load, time_lim, most_merge, (False, 0.0, 0.0), find_l=find_l)
             shuffle_time = 1
             shuffle_und_a = copy.deepcopy(und_a[1])
             while shuffle_time <= full_iteration[2] * len_und_a:
@@ -160,16 +167,20 @@ def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOAD
                     und_acopy = copy.deepcopy(shuffle_und_a)
                     und_acopy.remove(de_or_id)
                     try_next(res_routes, r_aa, rb, allo, [und_a[0] + de_pck, und_acopy],
-                             und_aa, last_b, max_load, time_lim, most_merge, (False, 0.0, 0.0))
+                             und_aa, last_b, max_load, time_lim, most_merge, (False, 0.0, 0.0), find_l=find_l)
     return
 
 
 def bb_tsp(r, allo, und_a, time_lim=EXCEED_TIME_LIM, best_obj=np.inf, append_und=True,
-           now_punish=0.0, out_obj=False, pre_cal=None):
+           now_punish=0.0, out_obj=False, pre_cal=None, find_l=False):
     # TP append [last_a, und_a] to r
     if append_und:
-        last_a = len(r[0]) - 1
-        append_to_route(r, [last_a, und_a])
+        if find_l:
+            last_a, new_und = find_last(r)
+            append_to_route(r, [last_a, new_und])
+        else:
+            last_a = len(r[0]) - 1
+            append_to_route(r, [last_a, und_a])
     if und_a[0] <= 0:
         # no further delivery
         if out_obj:
@@ -446,10 +457,17 @@ def append_to_route(r, app):
 def check_route_feasible(r, load_max=MAX_LOADS):
     # TP
     all_pck = 0.0
+    order_times = 0.0
     for pck in r[3]:
         all_pck += pck
+        if pck > 0:
+            order_times += 1
+        else:
+            order_times -= 1
         if all_pck > load_max or all_pck < 0:
             return False
+    if all_pck != 0.0 or order_times != 0:
+        return False
     return True
 
 
@@ -483,3 +501,16 @@ def generate_o2o_minimum_start(allo):
         input_dic.close()
         print('Load complete.')
         return o2o_dict
+
+
+def generate_o2o_set(allo):
+    # TP
+    o2o_ord = allo[allo['order_type'] == 1]
+    o2o_set = []
+    for order_id in o2o_ord['order_id']:
+        pck = o2o_ord.at[order_id, 'num']
+        r = [[o2o_ord.at[order_id, 'ori_id'], o2o_ord.at[order_id, 'dest_id']], [], [], [pck, -pck],
+             [order_id, order_id]]
+        recal_time(r, allo)
+        o2o_set.append(r)
+    return o2o_set
