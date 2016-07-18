@@ -158,10 +158,7 @@ def getNext(currentLoad,ordersOnBoard,disTravelled,timeElasped,waitingTime,lateP
             (currentRoute,routeLength,nextStopDis)=getShortestPath(currentLoc,getDest(ordersOnBoard))
             if len(currentRoute)==0:
                 #if locations.loc[currentLoc,'location_type']!='sites':
-                print '%sno more orders to deliver. record and return.'%(pre)
-                #record results, which we can then combine later.
-                resultsNodes.append(routeHistory)
-                resultsTime.append(timeHistory+[(timeElasped,timeElasped,[])])
+                print '%sno more orders to deliver. return.'%(pre)
                 return 
             else:
                 currentDest=currentRoute[0]
@@ -279,7 +276,12 @@ def getNext(currentLoad,ordersOnBoard,disTravelled,timeElasped,waitingTime,lateP
             disTravelledWithoutNewSites=disTravelled+nextStopDis
             getNext(currentLoad,ordersOnBoard,disTravelledWithoutNewSites,timeElaspedWithoutNewSites,waitingTime,latePenalty,currentDest,nodesToGo,orderHistory,routeHistory,timeHistory,depth+1)
         else:
-            print '%sno more nodes to go'%(pre)
+            print '%sno more nodes to go, record and return.'%(pre)
+            #record results, which we can then combine later.
+            resultsNodes.append(routeHistory)
+            resultsTime.append(timeHistory)#+[(timeElasped,timeElasped,[])])
+            return 
+
         
         if depth<maxDepth:
             #go to the nearest sites if the search is not too deep. otherwise, stop going deeper and devliver all the goods
