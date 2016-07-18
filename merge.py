@@ -559,7 +559,7 @@ def format_transform(results_nodes, results_times, allo):
     routes = []
     for nodes, times in zip(results_nodes, results_times):
         r = [[], [], [], [], []]
-        for node_id, time_info in zip(nodes, times)[:-1]:
+        for node_id, time_info in zip(nodes, times):
             pick = True
             if time_info[3] == 'deliver':
                 pick = False
