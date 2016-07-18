@@ -572,5 +572,8 @@ def format_transform(results_nodes, results_times, allo):
                 else:
                     r[3].append(-pck)
         recal_time(r, allo)
-        routes.append(r)
+        if check_route_feasible(r):
+            routes.append(r)
+        else:
+            print('route infeasible!')
     return routes
