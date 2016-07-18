@@ -108,7 +108,7 @@ def merge_order(ra, rb, all_orders, last_a, und_a, max_load=MAX_LOADS, time_lim=
 
 def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOADS, time_lim=EXCEED_TIME_LIM,
              most_merge=np.inf, full_iteration=(True, 0.0, 0.0)):
-    # TP First judge if it's the end of a merge; full_iteration=(Flag, most_n, rand_shuffle_num)
+    # TP First judge if it's the end of a merge; full_iteration=(Flag, most_n, rand_shuffle_num/n = (n-1)!)
     if len(res_routes) >= most_merge:
         return
     if last_b < 0:
@@ -137,7 +137,8 @@ def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOAD
                          und_aa, last_b, max_load, time_lim, most_merge, full_iteration)
     else:
         # first try the default order. then shuffle rand times
-        if len(und_a[1]) > 0:
+        len_und_a = len(und_a[1])
+        if len_und_a > 0:
             de_or_id = und_a[1][0]
             de_id, de_pck = allo.at[de_or_id, 'dest_id'], -allo.at[de_or_id, 'num']
             is_suc, r_aa, und_aa = route_node_merge(ra, und_all, [de_id, de_pck, de_or_id], allo, max_load, time_lim)
@@ -148,7 +149,7 @@ def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOAD
                          und_aa, last_b, max_load, time_lim, most_merge, (False, 0.0, 0.0))
             shuffle_time = 1
             shuffle_und_a = copy.deepcopy(und_a[1])
-            while shuffle_time <= full_iteration[2]:
+            while shuffle_time <= full_iteration[2] * len_und_a:
                 shuffle_time += 1
                 random.shuffle(shuffle_und_a)
                 de_or_id = shuffle_und_a[0]
