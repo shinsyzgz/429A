@@ -6,10 +6,12 @@ import pickle
 
 # Constant: speed is the car speed. MERGE_MAX_DISTANCE is the max distance to merge
 SPEED = 250.0
-MERGE_MAX_DISTANCE = 45000.0
+MERGE_MAX_DISTANCE_DELIVERY = 45000.0
+MERGE_MAX_DISTANCE_PICKUP = 10000.0
 SITE_END_TIME = 720.0
 MAX_LOADS = 140.0
 EXCEED_TIME_LIM = 40.0
+EXCEED_TIME_LIM_TSP = 50.0
 O2O_MINI_START = None
 # O2O_MINI_START = {o2o order id: (min pickup arr time, nearest site id)}
 
@@ -116,6 +118,8 @@ def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOAD
         pre_cal_res = generate_distance_time(ra, und_all, allo)
         append_last = len(ra[0]) - 1
         ra = bb_tsp(ra, allo, und_all, time_lim, pre_cal=pre_cal_res, find_l=find_l, append_und=False)
+        if ra is None:
+            return
         if find_l:
             append_last, append_und = find_last(ra)
         else:
@@ -197,6 +201,12 @@ def bb_tsp(r, allo, und_a, time_lim=EXCEED_TIME_LIM, best_obj=np.inf, append_und
                                                         MAX_LOADS, time_lim, False, True, pre_cal)
         if not is_suc:
             raise Exception('Exceed load limits')
+        if pre_cal is None:
+            judge_delivery = allo.at[r_aa[4][-1], 'delivery_time']
+        else:
+            judge_delivery = pre_cal['delivery time'][pre_cal['index'][r_aa[4][-1] + 'd']]
+        if r_aa[1][-1] > EXCEED_TIME_LIM_TSP + judge_delivery:
+            continue
         next_punish = now_punish + punish
         adjust = 0.0
         if (not (pre_cal is None)) and len(und_aa[1]) > 0:
@@ -240,7 +250,11 @@ def route_node_merge(r, und_a, node, allo, max_load=MAX_LOADS, time_lim=EXCEED_T
         arr_t, lea_t, info = quick_time_update(node[2], np.round(r[2][-1]), r[4][-1], r[3][-1], pre_cal, cal_punish)
     dis = info[2]
     if check_dis_time:
-        if dis > MERGE_MAX_DISTANCE:
+        if node[1] < 0:
+            dis_threshold = MERGE_MAX_DISTANCE_DELIVERY
+        else:
+            dis_threshold = MERGE_MAX_DISTANCE_PICKUP
+        if dis > dis_threshold:
             return False, [], []
         if arr_t > time_lim + info[4]:
             return False, [], []
@@ -465,8 +479,12 @@ def check_route_feasible(r, load_max=MAX_LOADS):
         else:
             order_times -= 1
         if all_pck > load_max or all_pck < 0:
+            print('Route with infeasible cumulative loads: ')
+            print(r)
             return False
     if all_pck != 0.0 or order_times != 0:
+        print('Route infeasible with all_pck = ' + str(all_pck) + ' and order_times = ' + str(order_times) + ': ')
+        print(r)
         return False
     return True
 
@@ -514,3 +532,45 @@ def generate_o2o_set(allo):
         recal_time(r, allo)
         o2o_set.append(r)
     return o2o_set
+
+
+def cal_xc(routes, allo):
+    # TP
+    x = []
+    c = []
+    # First generate all the x
+    for order_id in allo['order_id']:
+        route_ind = 0
+        x_row = []
+        for r in routes:
+            if order_id in r[4]:
+                x_row.append(route_ind)
+            route_ind += 1
+        x.append(x_row)
+    # generate all the cost
+    for r in routes:
+        r, punish_info = recal_time(r, allo, True)
+        c.append(r[2][-1] + punish_info[0])
+    return x, c
+
+
+def format_transform(results_nodes, results_times, allo):
+    # TP
+    routes = []
+    for nodes, times in zip(results_nodes, results_times):
+        r = [[], [], [], [], []]
+        for node_id, time_info in zip(nodes, times)[:-1]:
+            pick = True
+            if time_info[3] == 'deliver':
+                pick = False
+            for order_id in time_info[2]:
+                r[0].append(node_id)
+                r[4].append(order_id)
+                pck = allo.at[order_id, 'num']
+                if pick:
+                    r[3].append(pck)
+                else:
+                    r[3].append(-pck)
+        recal_time(r, allo)
+        routes.append(r)
+    return routes
