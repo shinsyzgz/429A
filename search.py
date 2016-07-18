@@ -151,7 +151,6 @@ def getNext(currentLoad,ordersOnBoard,disTravelled,timeElasped,waitingTime,lateP
     print '%scurrently at: %s, nodesToGo: %s'%(pre,currentLoc,'|'.join(nodesToGo))
     routeHistory=routeHistory+[currentLoc]
     
-    #if currentLoc is a site, then try to carry up all the appropriate orders.
     if depth==0:
         currentDest=orders.loc[ordersOnBoard[0],'dest_id']
     else:
@@ -170,6 +169,7 @@ def getNext(currentLoad,ordersOnBoard,disTravelled,timeElasped,waitingTime,lateP
             currentDest=nodesToGo[0]
             
     
+    #if currentLoc is a site, then try to carry up all the appropriate orders.
     if locations.loc[currentLoc,'location_type']=='sites':
         ordersOnThisSite=orders[orders['ori_id']==currentLoc]
         if len(ordersOnBoard)==0:#this means, during our delivery process, we finished all the delivery task and arrived at a new site.
@@ -204,11 +204,11 @@ def getNext(currentLoad,ordersOnBoard,disTravelled,timeElasped,waitingTime,lateP
                 for j in t:
                     tmpSum+=orders.loc[j,'num']
                 if tmpSum+currentLoad<maxLoad:
-                    currentLoad+=tmpSum
-                    ordersOnBoard=ordersOnBoard+t
-                    orderHistory=orderHistory+t
-                    print  '%spicking up orders: [%s], new load: %d'%(pre,'/'.join(t),currentLoad)
-                    (currentRoute,routeLength,nextStopDis)=getShortestPath(currentLoc,getDest(ordersOnBoard))
+                    currentLoadThis=tmpSum+currentLoad
+                    ordersOnBoardThis=ordersOnBoard+t
+                    orderHistoryThis=orderHistory+t
+                    print  '%spicking up orders: [%s], new load: %d'%(pre,'/'.join(t),currentLoadThis)
+                    (currentRoute,routeLength,nextStopDis)=getShortestPath(currentLoc,getDest(ordersOnBoardThis))
                     currentDest=currentRoute[0]
                     if len(currentRoute)>1:
                         nodesToGo=currentRoute[1:]
@@ -220,16 +220,18 @@ def getNext(currentLoad,ordersOnBoard,disTravelled,timeElasped,waitingTime,lateP
                     #routeHistoryWithoutNewSites=routeHistory+[currentDest]
                     #timeHistoryWithoutNewSites=timeHistory+[(timeElasped,timeElasped)]
                     disTravelledWithoutNewSites=disTravelled+nextStopDis
-                    if depth==0:
-                        timeHistoryThis=timeHistory+[(timeElasped,timeElasped,ordersOnBoard,'pickup')]
+                    if (depth==0) :
+                        timeHistoryThis=timeHistory+[(timeElasped,timeElasped,ordersOnBoardThis,'pickup')]
                     else:
                         timeHistoryThis=timeHistory+[(timeElasped,timeElasped,t,'pickup')]
-                    getNext(currentLoad,ordersOnBoard,disTravelledWithoutNewSites,timeElaspedWithoutNewSites,waitingTime,latePenalty,currentDest,nodesToGo,orderHistory,routeHistory,timeHistoryThis,depth+1)
+                    getNext(currentLoadThis,ordersOnBoardThis,disTravelledWithoutNewSites,timeElaspedWithoutNewSites,waitingTime,latePenalty,currentDest,nodesToGo,orderHistoryThis,routeHistory,timeHistoryThis,depth+1)
 
 
                     #try to see if this rider can visit ONE other site before serving orders.
                     #at present, very simple rule: go to the nearest unvisited site.
                     #sitesToVisit=set(getAppropriateSites(currentLoc,currentDest))-set(routeHistory)
+                    if depth > maxDepth:
+                        continue
                     siteToVisit=getPossibleSite(currentLoc,routeHistory)
                     if siteToVisit==0 or currentLoad>100:
                         print '%sno nearby unvisited sites or bag almost full(%d).'%(pre,currentLoad)
@@ -242,7 +244,7 @@ def getNext(currentLoad,ordersOnBoard,disTravelled,timeElasped,waitingTime,lateP
                     #routeHistoryWithNewSites=routeHistory+[currentDest]
                     #timeHistoryWithNewSites=timeHistory+[(timeElasped,timeElasped)]
                     disTravelledWithNewSites=disTravelled+dis
-                    getNext(currentLoad,ordersOnBoard,disTravelledWithNewSites,timeElaspedWithNewSites,waitingTime,latePenalty,currentDest,[],orderHistory,routeHistory,timeHistoryThis,depth+1)
+                    getNext(currentLoadThis,ordersOnBoardThis,disTravelledWithNewSites,timeElaspedWithNewSites,waitingTime,latePenalty,currentDest,[],orderHistoryThis,routeHistory,timeHistoryThis,depth+1)
 
 
     elif locations.loc[currentLoc,'location_type']=='spots':
@@ -313,7 +315,7 @@ def search(normalOrderToStart):
 maxLoad=140
 terminateTime=12*60.0
 filterAngle=30.0
-siteSearchRange=2000 #only search sites within 5km
+siteSearchRange=1000 #only search sites within 5km
 maxDepth=10 #search depth
 startTime=time.time()
 (locations,orders)=loadData('../original_data')
@@ -336,3 +338,6 @@ search(normalOrders.index[10])
 for i in range(len(resultsNodes)):
     print '\n---results no.',i,'---'
     print 'node sequence:\n\t',resultsNodes[i],'\ntimes:\n\t',resultsTime[i]
+
+
+
