@@ -189,7 +189,7 @@ def getNext(currentLoad,ordersOnBoard,disTravelled,timeElasped,waitingTime,lateP
                 return
             print '%smore orders are available to carry: %s'%(pre, '/'.join(ordersToCarry))
             combo=[]
-            for i in range(len(ordersToCarry)):
+            for i in range(min(4, len(ordersToCarry))):
                 combo+=itertools.combinations(ordersToCarry,i)
             if len(combo)==0:
                 combo+=[()]
