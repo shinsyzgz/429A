@@ -184,13 +184,15 @@ def getNext(currentLoad,ordersOnBoard,disTravelled,timeElasped,waitingTime,lateP
         else:
             ordersToCarry=set(getAppropriateOrders(currentLoc,currentDest,ordersOnThisSite))-set(ordersOnBoard)-set(orderHistory)
             print '%scurrently at a site. '%(pre)
-            if len(ordersToCarry)==0:
+            if (len(ordersToCarry)==0) and (depth>0):
                 print '%sno orders available to carry. This search goes unecessary distance, abondaned.'%(pre)
                 return
             print '%smore orders are available to carry: %s'%(pre, '/'.join(ordersToCarry))
             combo=[]
             for i in range(len(ordersToCarry)):
                 combo+=itertools.combinations(ordersToCarry,i)
+            if len(combo)==0:
+                combo+=[()]
             for i in combo:
                 t=list(i)
                 
@@ -334,7 +336,7 @@ print 'data set has %d orders, of which %d are normal orders.'%(numOfOrders,numO
 
 resultsNodes=[]
 resultsTime=[]
-search(normalOrders.index[10])
+search(normalOrders.index[0])
 
 
 for i in range(len(resultsNodes)):
