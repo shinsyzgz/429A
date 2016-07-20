@@ -135,11 +135,19 @@ def getNext(currentLoad,ordersOnBoard,disTravelled,timeElasped,waitingTime,lateP
     global spots,shops,sites
     global resultsNodes,resultsTime
     global maxDepth
+    global stopCount
     SPEED=250 #meters per minute
     
     #if depth>maxDepth:
     #    return
+
+    newCount=0
     
+    if newCount>stopCount:
+        if depth==0:
+            print '###search terminated (counts:%d)### '%(newCount)
+        return newCount
+
     ordersOnBoard=copy.deepcopy(ordersOnBoard)
     orderHistory=copy.deepcopy(orderHistory)
     routeHistory=copy.deepcopy(routeHistory)
@@ -159,7 +167,7 @@ def getNext(currentLoad,ordersOnBoard,disTravelled,timeElasped,waitingTime,lateP
             if len(currentRoute)==0:
                 #if locations.loc[currentLoc,'location_type']!='sites':
                 print '%sno more orders to deliver. return.'%(pre)
-                return 
+                return newCount 
             else:
                 currentDest=currentRoute[0]
         else:
@@ -186,7 +194,7 @@ def getNext(currentLoad,ordersOnBoard,disTravelled,timeElasped,waitingTime,lateP
             print '%scurrently at a site. '%(pre)
             if (len(ordersToCarry)==0) and (depth>0):
                 print '%sno orders available to carry. This search goes unecessary distance, abondaned.'%(pre)
-                return
+                return newCount
             print '%smore orders are available to carry: %s'%(pre, '/'.join(ordersToCarry))
             combo=[]
             for i in range(min(4, len(ordersToCarry))):
@@ -223,9 +231,12 @@ def getNext(currentLoad,ordersOnBoard,disTravelled,timeElasped,waitingTime,lateP
                         timeHistoryThis=timeHistory+[(timeElasped,timeElasped,ordersOnBoardThis,'pickup')]
                     else:
                         timeHistoryThis=timeHistory+[(timeElasped,timeElasped,t,'pickup')]
-                    getNext(currentLoadThis,ordersOnBoardThis,disTravelledWithoutNewSites,timeElaspedWithoutNewSites,waitingTime,latePenalty,currentDest,nodesToGo,orderHistoryThis,routeHistory,timeHistoryThis,depth+1)
+                    newCount+=getNext(currentLoadThis,ordersOnBoardThis,disTravelledWithoutNewSites,timeElaspedWithoutNewSites,waitingTime,latePenalty,currentDest,nodesToGo,orderHistoryThis,routeHistory,timeHistoryThis,depth+1)
 
-
+                    if newCount>stopCount:
+                        if depth==0:
+                            print '###search terminated (counts:%d)### '%(newCount)
+                        return newCount
                     #try to see if this rider can visit ONE other site before serving orders.
                     #at present, very simple rule: go to the nearest unvisited site.
                     #sitesToVisit=set(getAppropriateSites(currentLoc,currentDest))-set(routeHistory)
@@ -243,7 +254,11 @@ def getNext(currentLoad,ordersOnBoard,disTravelled,timeElasped,waitingTime,lateP
                     #routeHistoryWithNewSites=routeHistory+[currentDest]
                     #timeHistoryWithNewSites=timeHistory+[(timeElasped,timeElasped)]
                     disTravelledWithNewSites=disTravelled+dis
-                    getNext(currentLoadThis,ordersOnBoardThis,disTravelledWithNewSites,timeElaspedWithNewSites,waitingTime,latePenalty,currentDest,[],orderHistoryThis,routeHistory,timeHistoryThis,depth+1)
+                    newCount+=getNext(currentLoadThis,ordersOnBoardThis,disTravelledWithNewSites,timeElaspedWithNewSites,waitingTime,latePenalty,currentDest,[],orderHistoryThis,routeHistory,timeHistoryThis,depth+1)
+                    if newCount>stopCount:
+                        if depth==0:
+                            print '###search terminated (counts:%d)### '%(newCount)
+                        return newCount
 
 
     elif locations.loc[currentLoc,'location_type']=='spots':
@@ -276,13 +291,18 @@ def getNext(currentLoad,ordersOnBoard,disTravelled,timeElasped,waitingTime,lateP
             #routeHistoryWithoutNewSites=routeHistory+[currentDest]
             #timeHistoryWithoutNewSites=timeHistory+[(arrivalTime,departureTime)]
             disTravelledWithoutNewSites=disTravelled+nextStopDis
-            getNext(currentLoad,ordersOnBoard,disTravelledWithoutNewSites,timeElaspedWithoutNewSites,waitingTime,latePenalty,currentDest,nodesToGo,orderHistory,routeHistory,timeHistory,depth+1)
+            newCount+=getNext(currentLoad,ordersOnBoard,disTravelledWithoutNewSites,timeElaspedWithoutNewSites,waitingTime,latePenalty,currentDest,nodesToGo,orderHistory,routeHistory,timeHistory,depth+1)
+            if newCount>stopCount:
+                if depth==0:
+                    print '###search terminated (counts:%d)### '%(newCount)
+                return newCount
+
         else:
             print '%sno more nodes to go, record and return.'%(pre)
             #record results, which we can then combine later.
             resultsNodes.append(routeHistory)
             resultsTime.append(timeHistory)#+[(timeElasped,timeElasped,[])])
-            return 
+            return newCount+len(timeHistory) 
 
         
         if depth<maxDepth:
@@ -299,7 +319,17 @@ def getNext(currentLoad,ordersOnBoard,disTravelled,timeElasped,waitingTime,lateP
                 #routeHistoryWithNewSites=routeHistory+[currentDest]
                 #timeHistoryWithNewSites=timeHistory+[(arrivalTime,departureTime)]
                 disTravelledWithNewSites=disTravelled+dis
-                getNext(currentLoad,ordersOnBoard,disTravelledWithNewSites,timeElaspedWithNewSites,waitingTime,latePenalty,currentDest,[],orderHistory,routeHistory,timeHistory,depth+1)
+                newCount+=getNext(currentLoad,ordersOnBoard,disTravelledWithNewSites,timeElaspedWithNewSites,waitingTime,latePenalty,currentDest,[],orderHistory,routeHistory,timeHistory,depth+1)
+
+                if newCount>stopCount:
+                    if depth==0:
+                        print '###search terminated (counts:%d)### '%(newCount)
+                    return newCount
+
+    if depth==0:
+        print  '%ssearch end for this order'%(pre) 
+
+    return newCount
 
 
 def search(normalOrderToStart):
@@ -321,6 +351,7 @@ terminateTime=12*60.0
 filterAngle=30.0
 siteSearchRange=1000 #only search sites within 5km
 maxDepth=10 #search depth
+stopCount=10000 # for each search, stop when we already got enough results
 startTime=time.time()
 (locations,orders)=loadData('../original_data')
 sites=locations[locations['location_type']=='sites']
