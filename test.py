@@ -3,7 +3,8 @@
 import random as rdm
 import merge as mg
 import numpy as np
-import copy
+import copy, time
+from multiprocessing import Pool, Manager
 
 
 def gener_routes(allo, re_cal=False, find_last=False):
@@ -68,3 +69,93 @@ def monte_tsp(r, und, allo, try_num=400000):
             best_r = test_r
             best_obj = test_obj
     return best_r, best_obj
+
+
+def remove_duplicate(some_list):
+    result = []
+    for r in some_list:
+        if not (r in result):
+            result.append(r)
+    return result
+
+
+def route_to_str(r):
+    r_str = ''
+    for ord_id in r[4]:
+        r_str += ord_id + ','
+    return r_str
+
+
+def str_to_route(r_str, allo):
+    r_nodes, pck = [], []
+    r_ord = r_str.split(',')[:-1]
+    pick_set = {}
+    for ord_id in r_ord:
+        if ord_id in pick_set:
+            # delivery
+            if pick_set[ord_id] > 1:
+                raise Exception('replicated order in ' + r_str + ' with order id ' + 'ord_id')
+            r_nodes.append(allo.at[ord_id, 'dest_id'])
+            pck.append(-allo.at[ord_id, 'num'])
+            pick_set[ord_id] += 1
+        else:
+            # pickup
+            r_nodes.append(allo.at[ord_id, 'ori_id'])
+            pck.append(allo.at[ord_id, 'num'])
+            pick_set[ord_id] = 0
+    new_r = [r_nodes, [], [], pck, r_ord]
+    mg.recal_time(new_r, allo)
+    last, und = mg.find_last(new_r)
+    mg.append_to_route(new_r, [last, und])
+    return new_r
+
+
+def sq_function(x):
+    global test_res1
+    sq_function.test_res.append(x)
+    test_res1.append(x)
+    sq_function.li.append(x)
+    # print(x)
+    return x + sq_function.test_res[0], x + test_res1[0]
+
+
+def test_speed(x):
+    test_speed.li1.append(x)
+
+
+def test_speed2(x):
+    return x
+
+
+def init(res, res1, li, li1):
+    # This shows how to pass global variables and functional private variables to sub processes
+    global test_res1
+    test_res1 = res1
+    sq_function.test_res = res
+    # This shows how to pass a changable variables to sub processes
+    sq_function.li = li
+    test_speed.li1 = li1
+
+
+if __name__ == '__main__':
+    test_res = [100]
+    test_res1 = [-100]
+    tr = Manager().list()
+    tr1 = Manager().list()
+    pool = Pool(3, init, (test_res, test_res1, tr, tr1))
+    test_res2 = pool.map(sq_function, range(100))
+    print(test_res1)
+    print(test_res)
+    print(test_res2)
+    print(tr)
+    t_sp = range(10000)
+    t1 = time.time()
+    pool.map(test_speed, t_sp)
+    t2 = time.time()
+    print(t2 - t1)
+    t3 = time.time()
+    rrr = pool.map(test_speed2, t_sp)
+    t4 = time.time()
+    print(t4 - t3)
+    print(tr1)
+    print(rrr)

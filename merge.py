@@ -530,6 +530,8 @@ def generate_o2o_set(allo):
         r = [[o2o_ord.at[order_id, 'ori_id'], o2o_ord.at[order_id, 'dest_id']], [], [], [pck, -pck],
              [order_id, order_id]]
         recal_time(r, allo)
+        last, und = find_last(r)
+        append_to_route(r, [last, und])
         o2o_set.append(r)
     return o2o_set
 
