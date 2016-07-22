@@ -491,7 +491,7 @@ def check_route_feasible(r, load_max=MAX_LOADS):
 
 def generate_o2o_minimum_start(allo):
     # TP
-    print('Generate O2O start time...')
+    # print('Generate O2O start time...')
     try:
         input_dic = open('o2o_start', 'rb')
     except IOError:
@@ -514,10 +514,10 @@ def generate_o2o_minimum_start(allo):
         print('Generation completed')
         return o2o_dict
     else:
-        print('Find file o2o_start, load the file...')
+        # print('Find file o2o_start, load the file...')
         o2o_dict = pickle.load(input_dic)
         input_dic.close()
-        print('Load complete.')
+        # print('Load complete.')
         return o2o_dict
 
 
