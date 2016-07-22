@@ -3,6 +3,7 @@ import copy
 import scipy.spatial.distance as sci_dis
 import random as random
 import pickle
+import math
 
 # Constant: speed is the car speed. MERGE_MAX_DISTANCE is the max distance to merge
 SPEED = 250.0
@@ -14,6 +15,7 @@ EXCEED_TIME_LIM = 40.0
 EXCEED_TIME_LIM_TSP = 50.0
 O2O_MINI_START = None
 # O2O_MINI_START = {o2o order id: (min pickup arr time, nearest site id)}
+CO1, CO2 = 2.0 * 6378137, np.pi/180.0
 
 
 def merge_set(all_orders, routes_set_a, routes_set_b=None, most_merge=np.inf, max_load=MAX_LOADS,
@@ -245,9 +247,9 @@ def route_node_merge(r, und_a, node, allo, max_load=MAX_LOADS, time_lim=EXCEED_T
         return False, [], []
     if pre_cal is None:
         xa, ya = get_cor(r[4][-1], allo, int(r[3][-1] < 0))
-        arr_t, lea_t, info = time_update(node[2], node[1], np.round(r[2][-1]), xa, ya, allo, cal_punish)
+        arr_t, lea_t, info = time_update(node[2], node[1], round(r[2][-1]), xa, ya, allo, cal_punish)
     else:
-        arr_t, lea_t, info = quick_time_update(node[2], np.round(r[2][-1]), r[4][-1], r[3][-1], pre_cal, cal_punish)
+        arr_t, lea_t, info = quick_time_update(node[2], round(r[2][-1]), r[4][-1], r[3][-1], pre_cal, cal_punish)
     dis = info[2]
     if check_dis_time:
         if node[1] < 0:
@@ -295,17 +297,50 @@ def find_last(r):
 
 def stay_time(pack_num):
     # TP
-    return np.round(3.0*np.sqrt(pack_num)+5.0)
+    return round(3.0*math.sqrt(pack_num)+5.0)
 
 
 def node_dis(ox, oy, dx, dy):
     # TP
-    return np.sqrt((ox-dx)**2+(oy-dy)**2)
+    return math.sqrt((ox-dx)**2+(oy-dy)**2)
+
+
+def node_dis_ll(long1, lat1, long2, lat2):
+    return CO1 * math.asin(math.sqrt(np.sin(CO2 * (lat1 - lat2)/2.0)**2 +
+                                     math.cos(CO2 * lat1) * math.cos(CO2 * lat2) *
+                                     math.sin(CO2 * (long1 - long2)/2.0)**2))
+
+
+def lng_lat_dis(long1, lat1, long2, lat2):
+    return CO1 * np.arcsin(np.sqrt(np.sin(CO2 * (lat1 - lat2)/2.0)**2 +
+                                   np.cos(CO2 * lat1) * np.cos(CO2 * lat2) * np.sin(CO2 * (long1 - long2)/2.0)**2))
+
+'''
+def node_dis2(ox, oy, dx, dy):
+    return math.sqrt((ox - dx)**2 + (oy - dy)**2)
+
+
+def lng_lat_dis(long1, lat1, long2, lat2):
+    return CO1 * np.arcsin(np.sqrt(np.sin(CO2 * (lat1 - lat2)/2.0)**2 +
+                                   np.cos(CO2 * lat1) * np.cos(CO2 * lat2) * np.sin(CO2 * (long1 - long2)/2.0)**2))
+
+
+def lng_lat_dis2(long1, lat1, long2, lat2):
+    return CO1 * math.asin(math.sqrt(math.sin(CO2 * (lat1 - lat2))**2 +
+                                     math.cos(CO2 * lat1) * math.cos(CO2 * lat2) *
+                                     math.sin(CO2 * (long1 - long2))**2))
+
+
+def lng_lat_dis3(long1, lat1, long2, lat2):
+    return CO1 * cmath.asin(cmath.sqrt(cmath.sin(CO2 * (lat1 - lat2))**2 +
+                                       cmath.cos(CO2 * lat1) * cmath.cos(CO2 * lat2) *
+                                       cmath.sin(CO2 * (long1 - long2))**2))
+'''
 
 
 def travel_time(dis, speed=SPEED):
     # TP
-    return np.round(dis/speed)
+    return round(dis/speed)
 
 
 def del_rep(ra, rb, allo, recalculate_time=True):
@@ -330,7 +365,7 @@ def del_rep(ra, rb, allo, recalculate_time=True):
     return nrb
 
 
-def recal_time(r, allo, cal_punish=False):
+def recal_time(r, allo, cal_punish=False, is_ll=False):
     # TP recalculate time in route r, and changing r itself
     # not counting the case that start with an O2O
     global O2O_MINI_START
@@ -347,14 +382,20 @@ def recal_time(r, allo, cal_punish=False):
             O2O_MINI_START = generate_o2o_minimum_start(allo)
         arr = [O2O_MINI_START[r[4][0]][0]]
         lea = [max(arr[0], allo.at[r[4][0], 'pickup_time'])]
-    xl, yl = get_cor(r[4][0], allo)
+    if is_ll:
+        xl, yl = get_cor_ll(r[4][0], allo)
+    else:
+        xl, yl = get_cor(r[4][0], allo)
     total_punish = 0.0
     punish = [0.0]
     for i in range(1, rl):
-        last_leave = np.round(lea[i-1])
+        last_leave = round(lea[i-1])
         pck_num = r[3][i]
         ord_id = r[4][i]
-        arr_time, lea_time, info = time_update(ord_id, pck_num, last_leave, xl, yl, allo, cal_punish)
+        if is_ll:
+            arr_time, lea_time, info = time_update_ll(ord_id, pck_num, last_leave, xl, yl, allo, cal_punish)
+        else:
+            arr_time, lea_time, info = time_update(ord_id, pck_num, last_leave, xl, yl, allo, cal_punish)
         xl, yl = info[:2]
         if cal_punish:
             punish.append(info[3])
@@ -391,11 +432,54 @@ def time_update(ord_id, pck_num, last_leave_time, last_x, last_y, allo, cal_puni
         dist = node_dis(last_x, last_y, xd, yd)
         arr_time = last_leave_time + travel_time(dist)
         lea_time = arr_time + 0.0
-        return arr_time, lea_time, (xd, yd, dist, 0.0, SITE_END_TIME)
+        punish = 0.0
+        if cal_punish and arr_time > SITE_END_TIME:
+            punish = 5.0 * (arr_time - SITE_END_TIME)
+        return arr_time, lea_time, (xd, yd, dist, punish, SITE_END_TIME)
     else:
         # pickup at O2O, arr_time = (last + travel), leave_time = max(arr_time, pickup time) remember round
         xd, yd = get_cor(ord_id, allo, 0)
         dist = node_dis(last_x, last_y, xd, yd)
+        arr_time = last_leave_time + travel_time(dist)
+        pick_time = allo.at[ord_id, 'pickup_time']
+        lea_time = max(arr_time, pick_time)
+        punish = 0.0
+        if cal_punish and arr_time > pick_time:
+            punish = 5.0 * (arr_time - pick_time)
+        return arr_time, lea_time, (xd, yd, dist, punish, pick_time)
+
+
+def time_update_ll(ord_id, pck_num, last_leave_time, last_x, last_y, allo, cal_punish=False):
+    # TP
+    if pck_num < 0:
+        # delivery, arr = last + travel, leave=arr+holding
+        xd, yd = get_cor_ll(ord_id, allo, 1)
+        dist = node_dis_ll(last_x, last_y, xd, yd)
+        arr_time = last_leave_time + travel_time(dist)
+        lea_time = arr_time + stay_time(-pck_num)
+        punish = 0.0
+        if allo.at[ord_id, 'order_type'] == 0:
+            del_time = SITE_END_TIME
+        else:
+            del_time = allo.at[ord_id, 'delivery_time']
+        if cal_punish:
+            if arr_time > del_time:
+                punish = 5.0 * (arr_time - del_time)
+        return arr_time, lea_time, (xd, yd, dist, punish, del_time)
+    elif allo.at[ord_id, 'order_type'] == 0:
+        # pickup at site, arr=last+travel, leave=arr
+        xd, yd = get_cor_ll(ord_id, allo, 0)
+        dist = node_dis_ll(last_x, last_y, xd, yd)
+        arr_time = last_leave_time + travel_time(dist)
+        lea_time = arr_time + 0.0
+        punish = 0.0
+        if cal_punish and arr_time > SITE_END_TIME:
+            punish = 5.0 * (arr_time - SITE_END_TIME)
+        return arr_time, lea_time, (xd, yd, dist, punish, SITE_END_TIME)
+    else:
+        # pickup at O2O, arr_time = (last + travel), leave_time = max(arr_time, pickup time) remember round
+        xd, yd = get_cor_ll(ord_id, allo, 0)
+        dist = node_dis_ll(last_x, last_y, xd, yd)
         arr_time = last_leave_time + travel_time(dist)
         pick_time = allo.at[ord_id, 'pickup_time']
         lea_time = max(arr_time, pick_time)
@@ -430,6 +514,13 @@ def get_cor(order_id, allo, o_type=0):
     return allo.at[order_id, 'dx'], allo.at[order_id, 'dy']
 
 
+def get_cor_ll(order_id, allo, o_type=0):
+    # TP type=0: pickup; else: delivery
+    if o_type == 0:
+        return allo.at[order_id, 'olng'], allo.at[order_id, 'olat']
+    return allo.at[order_id, 'dlng'], allo.at[order_id, 'dlat']
+
+
 def generate_distance_time(r, und, allo):
     # TP
     nodes = [r[0][-1]] + [allo.at[oid, 'dest_id'] for oid in und[1]]
@@ -453,7 +544,7 @@ def generate_distance_time(r, und, allo):
         xy_c.append((allo.at[oid, 'dx'], allo.at[oid, 'dy']))
     index_dic = {n_oid[i]: i for i in range(len(n_oid))}
     dis_m = sci_dis.cdist(xy_c, xy_c, 'euclidean')
-    tra_time_m = travel_time(dis_m)
+    tra_time_m = np.round(dis_m/SPEED)
     return {'distance': dis_m, 'travel time': tra_time_m, 'stay time': st_time, 'node ID': nodes, 'package num': pcks,
             'delivery time': deli_time, 'index': index_dic}
 
@@ -500,13 +591,17 @@ def generate_o2o_minimum_start(allo):
         site_ord = allo[allo['order_type'] == 0]
         o2o_dict = {}
         for o2o_order_id in o2o_ord['order_id']:
-            o2o_ox, o2o_oy = o2o_ord.at[o2o_order_id, 'ox'], o2o_ord.at[o2o_order_id, 'oy']
+            o2o_ox, o2o_oy = o2o_ord.at[o2o_order_id, 'olng'], o2o_ord.at[o2o_order_id, 'olat']
+            ll_cor = np.array([[site_ord.at[site_order_id, 'olng'], site_ord.at[site_order_id, 'olat']]
+                               for site_order_id in site_ord['order_id']])
+            diss = lng_lat_dis(ll_cor[:, 0], ll_cor[:, 1], o2o_ox, o2o_oy)
             min_dis, near_site = np.inf, ''
+            ttt_ind = 0
             for site_order_id in site_ord['order_id']:
-                site_ox, site_oy = site_ord.at[site_order_id, 'ox'], site_ord.at[site_order_id, 'oy']
-                dis = node_dis(site_ox, site_oy, o2o_ox, o2o_oy)
+                dis = diss[ttt_ind]
                 if dis < min_dis:
                     min_dis, near_site = dis, site_ord.at[site_order_id, 'ori_id']
+                ttt_ind += 1
             o2o_dict[o2o_order_id] = travel_time(min_dis), near_site
         output = open('o2o_start', 'wb')
         pickle.dump(o2o_dict, output)
@@ -551,7 +646,7 @@ def cal_xc(routes, allo):
         x.append(x_row)
     # generate all the cost
     for r in routes:
-        r, punish_info = recal_time(r, allo, True)
+        r, punish_info = recal_time(r, allo, True, is_ll=True)
         c.append(r[2][-1] + punish_info[0])
     return x, c
 

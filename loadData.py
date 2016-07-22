@@ -74,6 +74,10 @@ def loadData(path):
     allOrders['oy']=allOrders.apply(lambda x: locations.loc[x.ori_id,'y'],axis=1)
     allOrders['dx']=allOrders.apply(lambda x: locations.loc[x.dest_id,'x'],axis=1)
     allOrders['dy']=allOrders.apply(lambda x: locations.loc[x.dest_id,'y'],axis=1)
+    allOrders['olng']=allOrders.apply(lambda x: locations.loc[x.ori_id,'lng'],axis=1)
+    allOrders['olat'] = allOrders.apply(lambda x: locations.loc[x.ori_id, 'lat'], axis=1)
+    allOrders['dlng'] = allOrders.apply(lambda x: locations.loc[x.dest_id, 'lng'], axis=1)
+    allOrders['dlat'] = allOrders.apply(lambda x: locations.loc[x.dest_id, 'lat'], axis=1)
     
     allOrders.to_csv('allOrders.csv')
   

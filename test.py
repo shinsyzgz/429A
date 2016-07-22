@@ -5,6 +5,8 @@ import merge as mg
 import numpy as np
 import copy, time
 from multiprocessing import Pool, Manager
+import cPickle as cP
+import csv
 
 
 def gener_routes(allo, re_cal=False, find_last=False):
@@ -30,6 +32,49 @@ def gener_routes(allo, re_cal=False, find_last=False):
         mg.append_to_route(r3, [last3, und3])
         return [r1, r2, r3]
     return [r1, r2, r3]
+
+
+def test_cost():
+    reload(mg)
+    f = open('allo', 'rb')
+    allo = cP.load(f)
+    f.close()
+    ord_ids = []
+    for o_id in allo['order_id']:
+        ord_ids.append(o_id)
+    rdm.shuffle(ord_ids)
+    print(len(ord_ids))
+    delivery_num = rdm.randint(980, 1000)
+    routes = ['' for i in range(delivery_num)]
+    now_d = 0
+    while now_d < len(ord_ids):
+        for i in range(len(routes)):
+            routes[i] += ord_ids[now_d] + ',' + ord_ids[now_d] + ','
+            now_d += 1
+            if now_d >= len(ord_ids):
+                break
+    re_routes = []
+    for r_str in routes:
+        re_routes.append(str_to_route(r_str, allo, is_ll=True))
+    print(len(re_routes))
+    write_routes_res('test_result.csv', re_routes)
+    x, c = mg.cal_xc(re_routes, allo)
+    print(sum(c))
+
+
+def write_routes_res(file_name, route):
+    f = open('carriers', 'rb')
+    carrier_id = cP.load(f)
+    f.close()
+    f = open(file_name, 'wb')
+    write = csv.writer(f)
+    c_ind = 0
+    for r in route:
+        c_id = carrier_id[c_ind]
+        c_ind += 1
+        for node, arr, lea, num, order in zip(r[0], r[1], r[2], r[3], r[4]):
+            write.writerow([c_id, node, int(arr), int(lea), int(num), order])
+    f.close()
 
 
 def generate_route(allo, ord_num=8):
@@ -86,7 +131,7 @@ def route_to_str(r):
     return r_str
 
 
-def str_to_route(r_str, allo):
+def str_to_route(r_str, allo, is_ll=False):
     r_nodes, pck = [], []
     r_ord = r_str.split(',')[:-1]
     pick_set = {}
@@ -104,7 +149,7 @@ def str_to_route(r_str, allo):
             pck.append(allo.at[ord_id, 'num'])
             pick_set[ord_id] = 0
     new_r = [r_nodes, [], [], pck, r_ord]
-    mg.recal_time(new_r, allo)
+    mg.recal_time(new_r, allo, is_ll=is_ll)
     last, und = mg.find_last(new_r)
     mg.append_to_route(new_r, [last, und])
     return new_r
