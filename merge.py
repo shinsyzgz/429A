@@ -316,6 +316,7 @@ def lng_lat_dis(long1, lat1, long2, lat2):
                                    np.cos(CO2 * lat1) * np.cos(CO2 * lat2) * np.sin(CO2 * (long1 - long2)/2.0)**2))
 
 '''
+# this part for efficiency test.. math. is faster than np. if calculate one by one.
 def node_dis2(ox, oy, dx, dy):
     return math.sqrt((ox - dx)**2 + (oy - dy)**2)
 
