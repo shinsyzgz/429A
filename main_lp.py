@@ -2,7 +2,9 @@ import time
 import os
 import merge as mg
 import cPickle as cP
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool
+from solveByLP import opt
+import csv
 
 PROCESSORS = 100
 
@@ -62,18 +64,7 @@ def cal_c(r_str):
     return p_info[0] + new_r[2][-1]
 
 
-def cal_x(ord_id):
-    route_ind = 0
-    x_row = []
-    for route_str in cal_x.total_routes:
-        if ord_id in route_str:
-            x_row.append(route_ind)
-        route_ind += 1
-    return x_row
-
-
-def process_pro(all_r_str):
-    cal_x.total_routes = all_r_str
+def process_pro():
     import win32api
     import win32process
     import win32con
@@ -120,6 +111,21 @@ def dump_routes(f_name, r, is_set=False, pool1=None, is_compressed=False):
     return
 
 
+def write_routes_res(file_name, route):
+    f = open('carriers', 'rb')
+    carrier_id = cP.load(f)
+    f.close()
+    f = open(file_name, 'wb')
+    write = csv.writer(f)
+    c_ind = 0
+    for r in route:
+        c_id = carrier_id[c_ind]
+        c_ind += 1
+        for node, arr, lea, num, order in zip(r[0], r[1], r[2], r[3], r[4]):
+            write.writerow([c_id, node, int(arr), int(lea), int(num), order])
+    f.close()
+
+
 f1 = open('allo', 'rb')
 allo = cP.load(f1)
 f1.close()
@@ -140,8 +146,8 @@ if __name__ == '__main__':
     rnd_pairs_num = 5000
     rnd_prob_o2o, rnd_prob_new = 0.3, 0.4
     # multiprocessing
-    total_routes = Manager().list()
-    pool = Pool(PROCESSORS, process_pro, (total_routes,))
+    pool = Pool(PROCESSORS, process_pro)
+    total_routes = []
     # Site and O2O evolve themselves
     # read files:
     print('reading files...')
@@ -161,8 +167,39 @@ if __name__ == '__main__':
     print(str(len(r_costs)))
     stime = time.time()
     # generate the X
-    X = pool.map(cal_x, [o_id for o_id in allo['order_id']])
+    # X = pool.map(cal_x, [o_id for o_id in allo['order_id']])
+    X = [set() for oid in allo['order_id']]
+    o_ids = [oid for oid in allo['order_id']]
+    x_dic = {oid: i for oid, i in zip(o_ids, range(len(o_ids)))}
+    route_index = 0
+    for t_r_str in total_routes:
+        t_r_o_ids = t_r_str.split(',')[:-1]
+        for t_r_o_id in t_r_o_ids:
+            X[x_dic[t_r_o_id]].add(route_index)
+        route_index += 1
     print('relation matrix complete! Time: ' + str(time.time()-stime))
     print(len(X))
+
+    # Solve the LP problem
+    obj, r_select, status = opt(r_costs, X)
+    if r_select is None:
+        print('LP error!')
+    else:
+        sel_routes = []
+        r_s_ind = 0
+        for r_s in r_select:
+            if 0.01 < r_s < 0.99:
+                print('Relaxation error! Half route detected with selection = ' + str(r_s))
+                break
+            elif r_s > 0.99:
+                sel_routes.append(total_routes[r_s_ind])
+            r_s_ind += 1
+        # Check cost and output
+        cost, re_routes = 0.0, []
+        for sl_r_str in sel_routes:
+            cost += cal_c(sl_r_str)
+            re_routes.append(str_to_route(sl_r_str))
+        print('Check total cost: ' + str(cost) + '. Difference with lp cost: ' + str(cost - obj))
+        write_routes_res('test_result.csv', re_routes)
 
     os.system("pause")
