@@ -54,12 +54,35 @@ def test_cost():
             if now_d >= len(ord_ids):
                 break
     re_routes = []
+    c = []
     for r_str in routes:
+        c.append(cal_c(r_str, allo))
         re_routes.append(str_to_route(r_str, allo, is_ll=True))
     print(len(re_routes))
     write_routes_res('test_result.csv', re_routes)
-    x, c = mg.cal_xc(re_routes, allo)
     print(sum(c))
+
+
+def cal_c(r_str, allo, is_punish=True):
+    r_nodes, pck = [], []
+    r_ord = r_str.split(',')[:-1]
+    pick_set = {}
+    for ord_id in r_ord:
+        if ord_id in pick_set:
+            # delivery
+            if pick_set[ord_id] > 1:
+                raise Exception('replicated order in ' + r_str + ' with order id ' + 'ord_id')
+            r_nodes.append(allo.at[ord_id, 'dest_id'])
+            pck.append(-allo.at[ord_id, 'num'])
+            pick_set[ord_id] += 1
+        else:
+            # pickup
+            r_nodes.append(allo.at[ord_id, 'ori_id'])
+            pck.append(allo.at[ord_id, 'num'])
+            pick_set[ord_id] = 0
+    new_r = [r_nodes, [], [], pck, r_ord]
+    new_r, p_info = mg.recal_time(new_r, allo, is_punish, is_ll=True)
+    return p_info[0] + new_r[2][-1]
 
 
 def write_routes_res(file_name, route):

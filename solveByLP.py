@@ -8,7 +8,7 @@ def opt(C,X):
     routeIdx=range(routeNum)
     orderIdx=range(orderNum)
     print routeIdx,orderIdx
-    eps=1.0/10**6
+    eps=1.0/10**7
     print eps
     #var_choice=lp.LpVariable.dicts('route',routeIdx,0,1,cat='Integer')
     var_choice=lp.LpVariable.dicts('route',routeIdx,lowBound=0)#尝试松弛掉01变量
@@ -19,12 +19,12 @@ def opt(C,X):
     for i in orderIdx:
         prob+=lp.lpSum(var_choice[j] for j in X[i])>= (1-eps)
     
-    prob.solve()
+    prob.solve(lp.CPLEX(msg=0))
     print "\n\nstatus:",lp.LpStatus[prob.status]
     print "\n\nobjective:\n",lp.value(prob.objective)
-    print "\n\nvariables:\n",[var_choice[i].varValue for i in routeIdx]
+    print "\n\nvariables:\n",[round(var_choice[i].varValue) for i in routeIdx]
     #print "\n\noriginal problem:\n",prob
 
-C=[1,20,3]
+C=[1,2,1.000]
 X=[[0,1],[1,2]]
 opt(C,X)
