@@ -133,6 +133,7 @@ f1.close()
 if __name__ == '__main__':
     # Multiprocessing
     # loc, allo = loadData.loadData('../original_data')
+    lp_path = 'lpM20/'
     # parameters for self evolve
     rounds = 0
     pairs_num = 5000
@@ -151,13 +152,13 @@ if __name__ == '__main__':
     # Site and O2O evolve themselves
     # read files:
     print('reading files...')
-    total_routes += load_routes('lp/site_set', need_decompression=False)
+    total_routes += load_routes(lp_path + 'site_set', need_decompression=False)
     site_num = len(total_routes)
     print('Site complete with num: ' + str(site_num))
-    total_routes += load_routes('lp/o2o_set', need_decompression=False)
+    total_routes += load_routes(lp_path + 'o2o_set', need_decompression=False)
     o2o_num = len(total_routes) - site_num
     print('O2O complete with num: ' + str(o2o_num))
-    total_routes += load_routes('lp/new_set', need_decompression=False)
+    total_routes += load_routes(lp_path + 'new_set', need_decompression=False)
     new_num = len(total_routes) - o2o_num - site_num
     print('New complete with num: ' + str(new_num))
     stime = time.time()
@@ -181,7 +182,9 @@ if __name__ == '__main__':
     print(len(X))
 
     # Solve the LP problem
+    stime = time.time()
     obj, r_select, status = opt(r_costs, X)
+    print('Solve complete with time: ' + str(time.time()-stime))
     if r_select is None:
         print('LP error!')
     else:
@@ -200,6 +203,6 @@ if __name__ == '__main__':
             cost += cal_c(sl_r_str)
             re_routes.append(str_to_route(sl_r_str))
         print('Check total cost: ' + str(cost) + '. Difference with lp cost: ' + str(cost - obj))
-        write_routes_res('test_result.csv', re_routes)
+        write_routes_res(lp_path + 'test_result.csv', re_routes)
 
     os.system("pause")
