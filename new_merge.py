@@ -13,6 +13,7 @@ import cPickle as cP
 from multiprocessing import Pool
 from optimize_route import opt_route
 from main_lp import load_routes, dump_routes, process_pro
+from route_adjust import order_node
 
 PROCESSORS = 20
 
@@ -20,7 +21,25 @@ PROCESSORS = 20
 def merge_two(r):
     global allo, o2o_mini
     opt_str, obj = opt_route(r, allo, o2o_mini)
+    if opt_str is None:
+        return r
     return opt_str
+
+
+def merge_remove(r1, r2):
+    r1_list, r2_list = r1.split(',')[:-1], r2.split(',')[:-1]
+    r1_set = set(r1_list)
+    for o in r2_list:
+        if o not in r1_set:
+            r1_list.append(o)
+    return oid_to_str(r1_list)
+
+
+def oid_to_str(o_list):
+    r_str = ''
+    for ord_id in o_list:
+        r_str += ord_id + ','
+    return r_str
 
 
 f1 = open('allo', 'rb')
@@ -71,41 +90,50 @@ if __name__ == '__main__':
         isD = True
         now_r += 1
         print('Start rounds ' + str(now_r) + '. Generating pairs')
-        site_pairs = [(random.choice(site_set), random.choice(site_set)) for i in range(pairs_num)]
-        o2o_pairs = [(random.choice(o2o_set), random.choice(o2o_set)) for i in range(pairs_num)]
+        site_pairs, o2o_pairs = [], []
+        now_p = 0
+        while now_p < pairs_num:
+            site_candidate = merge_remove(random.choice(site_set), random.choice(site_set))
+            adj_candidate = order_node(site_candidate, False)
+            if adj_candidate in total_set:
+                continue
+            else:
+                site_pairs.append(site_candidate)
+                total_set.add(adj_candidate)
+                now_p += 1
+        now_p = 0
+        while now_p < pairs_num:
+            o2o_candidate = merge_remove(random.choice(o2o_set), random.choice(o2o_set))
+            adj_candidate = order_node(o2o_candidate, False)
+            if adj_candidate in total_set:
+                continue
+            else:
+                o2o_pairs.append(o2o_candidate)
+                total_set.add(adj_candidate)
+                now_p += 1
         print('Generating complete. Now merge site')
-        site_add_len = 0
         site_ms = pool.map(merge_two, site_pairs)
-        print('Site merge complete. Now delete replicate and add to site set and total set')
-        for si_m in site_ms:
-            for site_r in si_m:
-                if not (site_r in total_set):
-                    site_add_len += 1
-                    site_set.append(site_r)
-                    total_set.add(site_r)
+        print('Site merge complete. Now add to site set and total set')
+        site_set += site_ms
+        site_add_len = len(site_ms)
         print('Site completed. New site: ' + str(site_add_len))
         print('Start merge O2O')
         o2o_ms = pool.map(merge_two, o2o_pairs)
         print('o2o merge complete. Now del and add')
-        o2o_add_len = 0
-        for o_m in o2o_ms:
-            for o_str in o_m:
-                if not (o_str in total_set):
-                    o2o_add_len += 1
-                    o2o_set.append(o_str)
-                    total_set.add(o_str)
+        o2o_add_len = len(o2o_ms)
+        o2o_set += o2o_ms
         print('O2O completed. New O2O: ' + str(o2o_add_len))
         print('Round ' + str(now_r) + 'end.')
         if time.time() - stime > 20 * 60:
-            dump_routes('site_set', site_set, is_compressed=True)
-            dump_routes('o2o_set', o2o_set, is_compressed=True)
-            dump_routes('total_set', total_set, is_set=True)
+            dump_routes(site_f_name, site_set, is_compressed=True)
+            dump_routes(o2o_f_name, o2o_set, is_compressed=True)
+            dump_routes(total_f_name, total_set, is_set=True)
             print('Dump completed, next round')
             stime = time.time()
     if isD:
-        dump_routes('site_set', site_set, is_compressed=True)
-        dump_routes('o2o_set', o2o_set, is_compressed=True)
-        dump_routes('total_set', total_set, is_set=True)
+        dump_routes(site_f_name, site_set, is_compressed=True)
+        dump_routes(o2o_f_name, o2o_set, is_compressed=True)
+        dump_routes(total_f_name, total_set, is_set=True)
         print('Dump completed, self evolve end')
 
     # Set and O2O interaction
@@ -120,7 +148,6 @@ if __name__ == '__main__':
         # inter_type: 0 interaction, 1 site, 2 o2o
         now_p = 0
         while now_p < inter_pairs_num:
-            now_p += 1
             this_type = 0
             if random.random() < inter_prob_o2o:
                 # pick one from O2O orders
@@ -144,8 +171,15 @@ if __name__ == '__main__':
                     # pick from site
                     spic = random.choice(site_set)
                     this_type = 1
-            inter_pairs.append((spic, fpic))
-            inter_types.append(this_type)
+            inter_candidate = merge_remove(spic, fpic)
+            adj_candidate = order_node(inter_candidate, False)
+            if adj_candidate in total_set:
+                continue
+            else:
+                inter_pairs.append(inter_candidate)
+                total_set.add(adj_candidate)
+                inter_types.append(this_type)
+                now_p += 1
         print('Generate ' + str(len(inter_pairs)) + ' completed! Now start to merge...')
         site_add_len, o2o_add_len, new_add_len = 0, 0, 0
         inter_m_res = pool.map(merge_two, inter_pairs)
@@ -153,42 +187,33 @@ if __name__ == '__main__':
         for inter_m, inter_t in zip(inter_m_res, inter_types):
             if inter_t == 0:
                 # interaction
-                for inter_str in inter_m:
-                    if not (inter_str in total_set):
-                        new_add_len += 1
-                        new_set.append(inter_str)
-                        total_set.add(inter_str)
+                new_add_len += 1
+                new_set.append(inter_m)
             elif inter_t == 2:
                 # o2o
-                for o2o_str in inter_m:
-                    if not (o2o_str in total_set):
-                        o2o_add_len += 1
-                        o2o_set.append(o2o_str)
-                        total_set.add(o2o_str)
+                o2o_add_len += 1
+                o2o_set.append(inter_m)
             else:
                 # site
-                for site_str in inter_m:
-                    if not (site_str in total_set):
-                        site_add_len += 1
-                        site_set.append(site_str)
-                        total_set.add(site_str)
+                site_add_len += 1
+                site_set.append(inter_m)
         print('Add complete.')
         print('New added: ' + str(new_add_len))
         print('Site added: ' + str(site_add_len))
         print('O2O added: ' + str(o2o_add_len))
         print('Round ' + str(now_r) + 'end..')
         if time.time() - stime > 30 * 60:
-            dump_routes('site_set', site_set, is_compressed=True)
-            dump_routes('o2o_set', o2o_set, is_compressed=True)
-            dump_routes('new_set', new_set, is_compressed=True)
-            dump_routes('total_set', total_set, is_set=True)
+            dump_routes(site_f_name, site_set, is_compressed=True)
+            dump_routes(o2o_f_name, o2o_set, is_compressed=True)
+            dump_routes(new_f_name, new_set, is_compressed=True)
+            dump_routes(total_f_name, total_set, is_set=True)
             print('Dump completed, next round')
             stime = time.time()
     if isD:
-        dump_routes('site_set', site_set, is_compressed=True)
-        dump_routes('o2o_set', o2o_set, is_compressed=True)
-        dump_routes('new_set', new_set, is_compressed=True)
-        dump_routes('total_set', total_set, is_set=True)
+        dump_routes(site_f_name, site_set, is_compressed=True)
+        dump_routes(o2o_f_name, o2o_set, is_compressed=True)
+        dump_routes(new_f_name, new_set, is_compressed=True)
+        dump_routes(total_f_name, total_set, is_set=True)
         print('Dump completed, interaction end.')
 
     # Start random merge process
@@ -200,7 +225,6 @@ if __name__ == '__main__':
         rnd_pairs, rnd_types = [], []
         now_p = 0
         while now_p < rnd_pairs_num:
-            now_p += 1
             this_type = 0
             # type: 0 inter, 1 site, 2 o2o
             f_p_r = random.random()
@@ -230,56 +254,54 @@ if __name__ == '__main__':
                 # spick site order
                 spic = random.choice(site_set)
                 s_p_t = 1
-            rnd_pairs.append((fpic, spic))
-            if f_p_t == 2 == s_p_t:
-                this_type = 2
-            elif f_p_t == 1 == s_p_t:
-                this_type = 1
+            rnd_candidate = merge_remove(fpic, spic)
+            adj_candidate = order_node(rnd_candidate, False)
+            if adj_candidate in total_set:
+                continue
             else:
-                this_type = 0
-            rnd_types.append(this_type)
+                rnd_pairs.append(rnd_candidate)
+                total_set.add(adj_candidate)
+                if f_p_t == 2 == s_p_t:
+                    this_type = 2
+                elif f_p_t == 1 == s_p_t:
+                    this_type = 1
+                else:
+                    this_type = 0
+                rnd_types.append(this_type)
+                now_p += 1
         print('Generate ' + str(len(rnd_pairs)) + ' completed. Now start to merge...')
         site_add_len, o2o_add_len, new_add_len = 0, 0, 0
         rnd_m_res = pool.map(merge_two, rnd_pairs)
         print('Merge complete. Del and add')
-        for rnd_m, rnd_t in zip(rnd_m_res, rnd_types):
+        for rnd_str, rnd_t in zip(rnd_m_res, rnd_types):
             if rnd_t == 0:
                 # inter
-                for rnd_str in rnd_m:
-                    if not (rnd_str in total_set):
-                        new_add_len += 1
-                        new_set.append(rnd_str)
-                        total_set.add(rnd_str)
+                new_add_len += 1
+                new_set.append(rnd_str)
             elif rnd_t == 2:
                 # o2o
-                for rnd_str in rnd_m:
-                    if not (rnd_str in total_set):
-                        o2o_add_len += 1
-                        o2o_set.append(rnd_str)
-                        total_set.add(rnd_str)
+                o2o_add_len += 1
+                o2o_set.append(rnd_str)
             else:
                 # site
-                for rnd_str in rnd_m:
-                    if not (rnd_str in total_set):
-                        site_add_len += 1
-                        site_set.append(rnd_str)
-                        total_set.add(rnd_str)
+                site_add_len += 1
+                site_set.append(rnd_str)
         print('Add complete.')
         print('New added: ' + str(new_add_len))
         print('Site added: ' + str(site_add_len))
         print('O2O added: ' + str(o2o_add_len))
         print('Round ' + str(now_r) + 'end..')
         if time.time() - stime > 30 * 60:
-            dump_routes('site_set', site_set, is_compressed=True)
-            dump_routes('o2o_set', o2o_set, is_compressed=True)
-            dump_routes('new_set', new_set, is_compressed=True)
-            dump_routes('total_set', total_set, is_set=True)
+            dump_routes(site_f_name, site_set, is_compressed=True)
+            dump_routes(o2o_f_name, o2o_set, is_compressed=True)
+            dump_routes(new_f_name, new_set, is_compressed=True)
+            dump_routes(total_f_name, total_set, is_set=True)
             print('Dump completed, next round')
             stime = time.time()
-    dump_routes('site_set', site_set, is_compressed=True)
-    dump_routes('o2o_set', o2o_set, is_compressed=True)
-    dump_routes('new_set', new_set, is_compressed=True)
-    dump_routes('total_set', total_set, is_set=True)
+    dump_routes(site_f_name, site_set, is_compressed=True)
+    dump_routes(o2o_f_name, o2o_set, is_compressed=True)
+    dump_routes(new_f_name, new_set, is_compressed=True)
+    dump_routes(total_f_name, total_set, is_set=True)
     print('Dump completed, rnd end.')
 
     os.system("pause")
