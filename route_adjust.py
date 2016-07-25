@@ -64,7 +64,7 @@ def old_to_new(pool1):
         if not (rr in total_reorder):
             site_record.append(ro)
             total_reorder.add(rr)
-            total_dict[rr] = (rind, o_c)
+            total_dict[rr] = (len(site_record)-1, o_c)
         else:
             pre_ind, pre_c = total_dict[rr]
             if o_c < pre_c:
@@ -81,7 +81,7 @@ def old_to_new(pool1):
         if not (rr in total_reorder):
             o2o_record.append(ro)
             total_reorder.add(rr)
-            total_dict[rr] = (rind, o_c)
+            total_dict[rr] = (len(o2o_record)-1, o_c)
         else:
             pre_ind, pre_c = total_dict[rr]
             if o_c < pre_c:
@@ -98,7 +98,7 @@ def old_to_new(pool1):
         if not (rr in total_reorder):
             new_record.append(ro)
             total_reorder.add(rr)
-            total_dict[rr] = (rind, o_c)
+            total_dict[rr] = (len(new_record)-1, o_c)
         else:
             pre_ind, pre_c = total_dict[rr]
             if o_c < pre_c:
