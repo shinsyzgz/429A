@@ -14,8 +14,11 @@ from multiprocessing import Pool
 from optimize_route import opt_route
 from main_lp import load_routes, dump_routes, process_pro
 from route_adjust import order_node
+from scipy.spatial.distance import cdist
+import numpy as np
 
 PROCESSORS = 20
+MAX_MERGE_DIS = 6000
 
 
 def merge_two(r):
@@ -26,12 +29,27 @@ def merge_two(r):
     return opt_str
 
 
-def merge_remove(r1, r2):
+def merge_remove(r1, r2, compare_dis=True):
+    global allo
     r1_list, r2_list = r1.split(',')[:-1], r2.split(',')[:-1]
+    r1_num, r2_num = len(r1_list), len(r2_list)
     r1_set = set(r1_list)
     for o in r2_list:
         if o not in r1_set:
             r1_list.append(o)
+    if compare_dis:
+        if len(r1_list) < r1_num + r2_num:
+            return oid_to_str(r1_list)
+        r2_set = set(r2_list)
+        co1, co2 = [], []
+        for o1 in r1_set:
+            co1 += [(allo.at[o1, 'ox'], allo.at[o1, 'oy']), (allo.at[o1, 'dx'], allo.at[o1, 'dy'])]
+        for o2 in r2_set:
+            co2 += [(allo.at[o2, 'ox'], allo.at[o2, 'oy']), (allo.at[o2, 'dx'], allo.at[o2, 'dy'])]
+        min_dis = np.min(cdist(co1, co2, 'euclidean'))
+        # print(min_dis)
+        if min_dis >= MAX_MERGE_DIS:
+            return r2
     return oid_to_str(r1_list)
 
 
