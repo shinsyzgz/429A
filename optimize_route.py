@@ -1,5 +1,7 @@
 import pulp as lp
 import merge
+import os
+from main_lp import route_to_str
 
 SITE_END_TIME = 720.0
 MAX_LOADS = 140.0
@@ -99,9 +101,7 @@ def opt_tsp(r, und_a, pre_cal):
     o_route = route[:]
     for ind, position in zip(node_ind, res_list):
         o_route[position] = route[ind]
-    o_r_str = ''
-    for o_r_id in o_route:
-        o_r_str += o_r_id + ','
+    o_r_str = route_to_str([[], [], [], [], o_route])
     return o_r_str, obj
 
 
@@ -152,7 +152,7 @@ def opt_with_solver(node_ind, order_dict, travel_t, stay_t, pick_t, require_t, n
         prob += a[j] >= l[i] + travel_t[(i, j)] + big_m*(x[(i, j)] - 1)
         prob += t[j] >= t[i] + 1 + big_m*(x[(i, j)] - 1)
         prob += load[j] >= load[i] + num[i] + big_m*(x[(i, j)] - 1)
-    prob.solve(lp.CPLEX(msg=0))
+    prob.solve(lp.CPLEX(msg=0, options=['set logfile cplex/cplex%d.log' % os.getpid()]))
     if lp.LpStatus[prob.status] != 'Infeasible':
         sol_list = [int(round(t[i].varValue)) for i in node_ind]
         return lp.value(prob.objective), sol_list, lp.LpStatus[prob.status]
@@ -170,6 +170,8 @@ if __name__ == '__main__':
     r_t, und = test.generate_route(allo1, 5)
     merge.recal_time(r_t, allo1)
     pre_cal1 = merge.generate_distance_time(r_t, und, allo1)
+    merge.MAX_LOADS = 10000
+    merge.EXCEED_TIME_LIM_TSP = 10000
     t1 = time.time()
     opr1 = merge.bb_tsp(r_t, allo1, und, pre_cal=pre_cal1, append_und=False)
     t2 = time.time()
@@ -177,3 +179,5 @@ if __name__ == '__main__':
     t3 = time.time()
     print(t2-t1)
     print(t3-t2)
+    print(opr1)
+    print(opr2)
