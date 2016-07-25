@@ -1,6 +1,6 @@
 import cPickle as cP
 from multiprocessing import Pool
-from main_lp import load_routes, dump_routes, process_pro, route_to_str
+from main_lp import load_routes, dump_routes, process_pro, route_to_str, cal_c
 from optimize_route import opt_route
 from merge import generate_o2o_minimum_start
 
@@ -22,7 +22,7 @@ def generate_order_dic():
 def order_node(route_str):
     route_list = route_str.split(',')[:-1]
     route_list.sort(key=lambda x: order_dict[x])
-    return route_to_str([[], [], [], [], route_list])
+    return route_to_str([[], [], [], [], route_list]), cal_c(route_str)
 
 
 def optimal_route(r):
@@ -32,6 +32,80 @@ def optimal_route(r):
         print('Optimal error with ' + r)
         return r
     return opt_str
+
+
+def old_to_new(pool1):
+    # This part for adjust the old route version into the new merge one... Delete replicate routes
+    print('reading files...')
+    site_set_old = load_routes('site_set', need_decompression=False)
+    site_num_old = len(site_set_old)
+    print('Site complete with num: ' + str(site_num_old))
+    o2o_set_old = load_routes('o2o_set', need_decompression=False)
+    o2o_num_old = len(o2o_set_old)
+    print('O2O complete with num: ' + str(o2o_num_old))
+    new_set_old = load_routes('new_set', need_decompression=False)
+    new_num_old = len(new_set_old)
+    print('New complete with num: ' + str(new_num_old))
+    print('Start to transform site...')
+    site_reorder = pool1.map(order_node, site_set_old)
+    print('Site complete!')
+    o2o_reorder = pool1.map(order_node, o2o_set_old)
+    print('O2O complete!')
+    new_reorder = pool1.map(order_node, new_set_old)
+    print('New complete!')
+    total_reorder, total_dict = set(), {}
+    site_record, o2o_record, new_record = [], [], []
+    print('Del site')
+    for rind in range(site_num_old):
+        ro, rrs = site_set_old[rind], site_reorder[rind]
+        rr, o_c = rrs
+        if not (rr in total_reorder):
+            site_record.append(ro)
+            total_reorder.add(rr)
+            total_dict[rr] = (rind, o_c)
+        else:
+            pre_ind, pre_c = total_dict[rr]
+            if o_c < pre_c:
+                site_record[pre_ind] = ro
+                total_dict[rr] = (pre_ind, o_c)
+    print('Site with ' + str(len(site_record)))
+    dump_routes('site_re', site_record, is_compressed=True)
+    print('Site dump complete!')
+
+    print('Del o2o')
+    for rind in range(o2o_num_old):
+        ro, rrs = o2o_set_old[rind], o2o_reorder[rind]
+        rr, o_c = rrs
+        if not (rr in total_reorder):
+            o2o_record.append(ro)
+            total_reorder.add(rr)
+            total_dict[rr] = (rind, o_c)
+        else:
+            pre_ind, pre_c = total_dict[rr]
+            if o_c < pre_c:
+                o2o_record[pre_ind] = ro
+                total_dict[rr] = (pre_ind, o_c)
+    print('o2o with ' + str(len(o2o_record)))
+    dump_routes('o2o_re', o2o_record, is_compressed=True)
+    print('o2o dump complete!')
+
+    print('Del new')
+    for rind in range(new_num_old):
+        ro, rrs = new_set_old[rind], new_reorder[rind]
+        rr, o_c = rrs
+        if not (rr in total_reorder):
+            new_record.append(ro)
+            total_reorder.add(rr)
+            total_dict[rr] = (rind, o_c)
+        else:
+            pre_ind, pre_c = total_dict[rr]
+            if o_c < pre_c:
+                new_record[pre_ind] = ro
+                total_dict[rr] = (pre_ind, o_c)
+    print('new with ' + str(len(new_record)))
+    dump_routes('new_re', new_record, is_compressed=True)
+    print('new dump complete!')
+    dump_routes('total_re', total_reorder, is_set=True)
 
 
 f1 = open('order_dict', 'rb')
@@ -44,6 +118,8 @@ o2o_mini = generate_o2o_minimum_start(allo)
 if __name__ == '__main__':
     PROCESSORS = 20
     pool = Pool(PROCESSORS, process_pro)
+    old_to_new(pool)
+    '''
     # read files:
     site_f_name, o2o_f_name, new_f_name, total_f_name = 'site_re', 'o2o_re', 'new_re', 'total_re'
     print('reading files...')
@@ -70,6 +146,7 @@ if __name__ == '__main__':
     site_opt = pool.map(optimal_route, site_set)
     print('Site complete!')
     dump_routes(site_f_name, site_opt, is_compressed=True)
+    '''
 
     '''
     # This part for adjust the old route version into the new merge one... Delete replicate routes
