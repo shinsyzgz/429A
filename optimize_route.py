@@ -153,6 +153,7 @@ def opt_with_solver(node_ind, order_dict, travel_t, stay_t, pick_t, require_t, n
         prob += t[j] >= t[i] + 1 + big_m*(x[(i, j)] - 1)
         prob += load[j] >= load[i] + num[i] + big_m*(x[(i, j)] - 1)
     prob.solve(lp.CPLEX(msg=0, options=['set logfile cplex/cplex%d.log' % os.getpid()]))
+    # set threads 100
     if lp.LpStatus[prob.status] != 'Infeasible':
         sol_list = [int(round(t[i].varValue)) for i in node_ind]
         return lp.value(prob.objective), sol_list, lp.LpStatus[prob.status]
