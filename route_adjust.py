@@ -19,10 +19,12 @@ def generate_order_dic():
     f.close()
 
 
-def order_node(route_str):
+def order_node(route_str, is_cal=True):
     route_list = route_str.split(',')[:-1]
     route_list.sort(key=lambda x: order_dict[x])
-    return route_to_str([[], [], [], [], route_list]), cal_c(route_str)
+    if is_cal:
+        return route_to_str([[], [], [], [], route_list]), cal_c(route_str)
+    return route_to_str([[], [], [], [], route_list])
 
 
 def optimal_route(r):
