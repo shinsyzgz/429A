@@ -6,6 +6,7 @@ from main_lp import route_to_str
 SITE_END_TIME = 720.0
 MAX_LOADS = 140.0
 PUNISH_CO = 5.0
+CPLEX_TIME_LIMIT = 600
 
 
 def opt_route(route_str, allo, o2o_mini, initial=None):
@@ -152,7 +153,7 @@ def opt_with_solver(node_ind, order_dict, travel_t, stay_t, pick_t, require_t, n
         prob += a[j] >= l[i] + travel_t[(i, j)] + big_m*(x[(i, j)] - 1)
         prob += t[j] >= t[i] + 1 + big_m*(x[(i, j)] - 1)
         prob += load[j] >= load[i] + num[i] + big_m*(x[(i, j)] - 1)
-    prob.solve(lp.CPLEX(msg=0, options=['set logfile cplex/cplex%d.log' % os.getpid()]))
+    prob.solve(lp.CPLEX(msg=0, timelimit=CPLEX_TIME_LIMIT, options=['set logfile cplex/cplex%d.log' % os.getpid()]))
     # set threads 100
     if lp.LpStatus[prob.status] != 'Infeasible':
         sol_list = [int(round(t[i].varValue)) for i in node_ind]
@@ -168,11 +169,9 @@ if __name__ == '__main__':
     f = open('allo', 'rb')
     allo1 = cP.load(f)
     f.close()
-    r_t, und = test.generate_route(allo1, 5)
+    r_t, und = test.generate_route(allo1, 20)
     merge.recal_time(r_t, allo1)
     pre_cal1 = merge.generate_distance_time(r_t, und, allo1)
-    merge.MAX_LOADS = 10000
-    merge.EXCEED_TIME_LIM_TSP = 10000
     t1 = time.time()
     opr1 = merge.bb_tsp(r_t, allo1, und, pre_cal=pre_cal1, append_und=False)
     t2 = time.time()
