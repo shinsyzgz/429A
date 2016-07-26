@@ -352,8 +352,18 @@ filterAngle=30.0
 siteSearchRange=1000 #only search sites within 5km
 maxDepth=10 #search depth
 stopCount=10000 # for each search, stop when we already got enough results
+debug=1
+
 startTime=time.time()
 (locations,orders)=loadData('../original_data')
+
+if debug==1:
+    xgap=1200
+    ygap=1200
+    shift=8000
+    locations=locations[(locations.x<xgap+shift)&(locations.x>-xgap+shift)&(locations.y<ygap+shift)&(locations.y>-ygap+shift)]
+    orders=orders[(orders.ox<xgap+shift)&(orders.ox>-xgap+shift)&(orders.oy<ygap+shift)&(orders.oy>-ygap+shift)&(orders.dx<xgap+shift)&(orders.dx>-xgap+shift)&(orders.dy<ygap+shift)&(orders.dy>-ygap+shift)]
+
 sites=locations[locations['location_type']=='sites']
 shops=locations[locations['location_type']=='shops']
 spots=locations[locations['location_type']=='spots']
