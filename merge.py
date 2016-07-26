@@ -4,6 +4,8 @@ import scipy.spatial.distance as sci_dis
 import random as random
 import pickle
 import math
+import optimize_route as op_tr
+import time
 
 # Constant: speed is the car speed. MERGE_MAX_DISTANCE is the max distance to merge
 SPEED = 250.0
@@ -16,6 +18,7 @@ EXCEED_TIME_LIM_TSP = 50.0
 O2O_MINI_START = None
 # O2O_MINI_START = {o2o order id: (min pickup arr time, nearest site id)}
 CO1, CO2 = 2.0 * 6378137, np.pi/180.0
+TSP_ALGORITHM_TIME_LIMIT = 600
 
 
 def merge_set(all_orders, routes_set_a, routes_set_b=None, most_merge=np.inf, max_load=MAX_LOADS,
@@ -119,7 +122,11 @@ def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOAD
     if last_b < 0:
         pre_cal_res = generate_distance_time(ra, und_all, allo)
         append_last = len(ra[0]) - 1
-        ra = bb_tsp(ra, allo, und_all, time_lim, pre_cal=pre_cal_res, find_l=find_l, append_und=False)
+        if len(und_all[1]) > 8:
+            ra, temp_obj = op_tr.opt_tsp(ra, und_all, pre_cal_res, allo)
+        else:
+            ra = bb_tsp(ra, allo, und_all, time_lim, pre_cal=pre_cal_res, find_l=find_l, append_und=False,
+                        s_time=time.time())
         if ra is None:
             return
         if find_l:
@@ -178,7 +185,7 @@ def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOAD
 
 
 def bb_tsp(r, allo, und_a, time_lim=EXCEED_TIME_LIM, best_obj=np.inf, append_und=True,
-           now_punish=0.0, out_obj=False, pre_cal=None, find_l=False):
+           now_punish=0.0, out_obj=False, pre_cal=None, find_l=False, s_time=np.Inf):
     # TP append [last_a, und_a] to r
     if append_und:
         if find_l:
@@ -192,6 +199,10 @@ def bb_tsp(r, allo, und_a, time_lim=EXCEED_TIME_LIM, best_obj=np.inf, append_und
         if out_obj:
             return r, r[2][-1] + now_punish
         return r
+    if time.time() > TSP_ALGORITHM_TIME_LIMIT + s_time:
+        if out_obj:
+            return None, best_obj
+        return None
     final_r = None
     for de_or_id in und_a[1]:
         if pre_cal is None:
@@ -229,7 +240,8 @@ def bb_tsp(r, allo, und_a, time_lim=EXCEED_TIME_LIM, best_obj=np.inf, append_und
             least_pun = np.sum(5.0 * (np.maximum(best_arr_time, left_del_time) - left_del_time))
             adjust += min_last_to_left + (left_nm - 1) * min_inter + total_left_stay + least_pun
         if next_punish + r_aa[2][-1] + adjust < best_obj:
-            test_r, best_obj = bb_tsp(r_aa, allo, und_aa, time_lim, best_obj, False, next_punish, True, pre_cal)
+            test_r, best_obj = bb_tsp(r_aa, allo, und_aa, time_lim, best_obj, False, next_punish, True, pre_cal,
+                                      s_time=s_time)
             if not (test_r is None):
                 final_r = test_r
     if out_obj:

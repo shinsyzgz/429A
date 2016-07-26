@@ -1,7 +1,6 @@
 import pulp as lp
 import merge
 import os
-from main_lp import route_to_str
 
 SITE_END_TIME = 720.0
 MAX_LOADS = 140.0
@@ -71,7 +70,7 @@ def opt_route(route_str, allo, o2o_mini, initial=None):
     return o_r_str, obj
 
 
-def opt_tsp(r, und_a, pre_cal):
+def opt_tsp(r, und_a, pre_cal, allo):
     if und_a[0] <= 0:
         return None
     node_ind = range(len(und_a[1]) + 1)
@@ -102,7 +101,12 @@ def opt_tsp(r, und_a, pre_cal):
     o_route = route[:]
     for ind, position in zip(node_ind, res_list):
         o_route[position] = route[ind]
-    o_r_str = route_to_str([[], [], [], [], o_route])
+    opt_nodes, opt_pck = r[0][:], r[3][:]
+    for n_o_id in o_route[1:]:
+        opt_nodes.append(allo.at[n_o_id, 'dest_id'])
+        opt_pck.append(-allo.at[n_o_id, 'num'])
+    o_r_str = [opt_nodes, [], [], opt_pck, r[4] + o_route[1:]]
+    merge.recal_time(o_r_str, allo)
     return o_r_str, obj
 
 
@@ -169,13 +173,13 @@ if __name__ == '__main__':
     f = open('allo', 'rb')
     allo1 = cP.load(f)
     f.close()
-    r_t, und = test.generate_route(allo1, 20)
+    r_t, und = test.generate_route(allo1, 4)
     merge.recal_time(r_t, allo1)
     pre_cal1 = merge.generate_distance_time(r_t, und, allo1)
     t1 = time.time()
     opr1 = merge.bb_tsp(r_t, allo1, und, pre_cal=pre_cal1, append_und=False)
     t2 = time.time()
-    opr2, obj1 = opt_tsp(r_t, und, pre_cal1)
+    opr2, obj1 = opt_tsp(r_t, und, pre_cal1, allo1)
     t3 = time.time()
     print(t2-t1)
     print(t3-t2)
