@@ -36,7 +36,7 @@ def optimal_route(r):
     return opt_str
 
 
-def old_to_new(pool1):
+def old_to_new(pool1, out_path='del_rep/', is_return=False):
     # This part for adjust the old route version into the new merge one... Delete replicate routes
     print('reading files...')
     site_set_old = load_routes('site_set', need_decompression=False)
@@ -71,7 +71,7 @@ def old_to_new(pool1):
                 site_record[pre_ind] = ro
                 total_dict[rr] = (pre_ind, o_c)
     print('Site with ' + str(len(site_record)))
-    dump_routes('site_re', site_record, is_compressed=True)
+    dump_routes(out_path + 'site_re', site_record, is_compressed=True)
     print('Site dump complete!')
 
     print('Del o2o')
@@ -88,7 +88,7 @@ def old_to_new(pool1):
                 o2o_record[pre_ind] = ro
                 total_dict[rr] = (pre_ind, o_c)
     print('o2o with ' + str(len(o2o_record)))
-    dump_routes('o2o_re', o2o_record, is_compressed=True)
+    dump_routes(out_path + 'o2o_re', o2o_record, is_compressed=True)
     print('o2o dump complete!')
 
     print('Del new')
@@ -105,9 +105,9 @@ def old_to_new(pool1):
                 new_record[pre_ind] = ro
                 total_dict[rr] = (pre_ind, o_c)
     print('new with ' + str(len(new_record)))
-    dump_routes('new_re', new_record, is_compressed=True)
+    dump_routes(out_path + 'new_re', new_record, is_compressed=True)
     print('new dump complete!')
-    dump_routes('total_re', total_reorder, is_set=True)
+    dump_routes(out_path + 'total_re', total_reorder, is_set=True)
 
 
 f1 = open('order_dict', 'rb')

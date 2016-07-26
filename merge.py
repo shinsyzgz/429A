@@ -4,7 +4,7 @@ import scipy.spatial.distance as sci_dis
 import random as random
 import pickle
 import math
-import optimize_route as op_tr
+# import optimize_route as op_tr
 import time
 
 # Constant: speed is the car speed. MERGE_MAX_DISTANCE is the max distance to merge
@@ -18,7 +18,8 @@ EXCEED_TIME_LIM_TSP = 50.0
 O2O_MINI_START = None
 # O2O_MINI_START = {o2o order id: (min pickup arr time, nearest site id)}
 CO1, CO2 = 2.0 * 6378137, np.pi/180.0
-TSP_ALGORITHM_TIME_LIMIT = 600
+TSP_ALGORITHM_TIME_LIMIT = 80
+MERGE_ALGORITHM_TIME_LIMIT = 500
 
 
 def merge_set(all_orders, routes_set_a, routes_set_b=None, most_merge=np.inf, max_load=MAX_LOADS,
@@ -110,23 +111,27 @@ def merge_order(ra, rb, all_orders, last_a, und_a, max_load=MAX_LOADS, time_lim=
         hard_m_last, hard_m_und = find_last(merge_r[0])
         merge_r[0][5] = [hard_m_last, hard_m_und]
     try_next(merge_r, temp_ra, nrb, all_orders, und_a, und_a, last_bb, max_load, time_lim, most_merge,
-             full_iteration=full_iteration)
+             full_iteration=full_iteration, s_time=time.clock())
     return merge_r
 
 
 def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOADS, time_lim=EXCEED_TIME_LIM,
-             most_merge=np.inf, full_iteration=(True, 0.0, 0.0), find_l=False):
+             most_merge=np.inf, full_iteration=(True, 0.0, 0.0), find_l=False, s_time=np.inf):
     # TP First judge if it's the end of a merge; full_iteration=(Flag, most_n, rand_shuffle_num/n = (n-1)!)
     if len(res_routes) >= most_merge:
         return
     if last_b < 0:
         pre_cal_res = generate_distance_time(ra, und_all, allo)
         append_last = len(ra[0]) - 1
+        ra = bb_tsp(ra, allo, und_all, time_lim, pre_cal=pre_cal_res, find_l=find_l, append_und=False,
+                    s_time=time.clock())
+        '''
         if len(und_all[1]) > 8:
             ra, temp_obj = op_tr.opt_tsp(ra, und_all, pre_cal_res, allo)
         else:
             ra = bb_tsp(ra, allo, und_all, time_lim, pre_cal=pre_cal_res, find_l=find_l, append_und=False,
-                        s_time=time.time())
+                        s_time=time.clock())
+        '''
         if ra is None:
             return
         if find_l:
@@ -136,13 +141,15 @@ def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOAD
         append_to_route(ra, [append_last, append_und])
         res_routes.append(ra)
         return
+    if time.clock() > MERGE_ALGORITHM_TIME_LIMIT + s_time:
+        return
     # try combine the following node in rb
     next_id, next_pck, next_oid = rb[0][0], rb[3][0], rb[4][0]
     is_suc, r_ab, und_ab = route_node_merge(ra, und_all, [next_id, next_pck, next_oid], allo, max_load, time_lim)
     if is_suc:
         new_rb = [rb[0][1:], [], [], rb[3][1:], rb[4][1:]]
         try_next(res_routes, r_ab, new_rb, allo, und_a, und_ab, last_b-1, max_load, time_lim, most_merge,
-                 full_iteration, find_l=find_l)
+                 full_iteration, find_l=find_l, s_time=s_time)
     elif und_a[0] <= 0:
         return
     # try combine the node in und_a
@@ -154,7 +161,7 @@ def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOAD
                 und_acopy = copy.deepcopy(und_a[1])
                 und_acopy.remove(de_or_id)
                 try_next(res_routes, r_aa, rb, allo, [und_a[0] + de_pck, und_acopy],
-                         und_aa, last_b, max_load, time_lim, most_merge, full_iteration, find_l=find_l)
+                         und_aa, last_b, max_load, time_lim, most_merge, full_iteration, find_l=find_l, s_time=s_time)
     else:
         # first try the default order. then shuffle rand times
         len_und_a = len(und_a[1])
@@ -166,7 +173,8 @@ def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOAD
                 und_acopy = copy.deepcopy(und_a[1])
                 und_acopy.remove(de_or_id)
                 try_next(res_routes, r_aa, rb, allo, [und_a[0] + de_pck, und_acopy],
-                         und_aa, last_b, max_load, time_lim, most_merge, (False, 0.0, 0.0), find_l=find_l)
+                         und_aa, last_b, max_load, time_lim, most_merge, (False, 0.0, 0.0), find_l=find_l,
+                         s_time=s_time)
             shuffle_time = 1
             shuffle_und_a = copy.deepcopy(und_a[1])
             while shuffle_time <= full_iteration[2] * len_und_a:
@@ -180,12 +188,13 @@ def try_next(res_routes, ra, rb, allo, und_a, und_all, last_b, max_load=MAX_LOAD
                     und_acopy = copy.deepcopy(shuffle_und_a)
                     und_acopy.remove(de_or_id)
                     try_next(res_routes, r_aa, rb, allo, [und_a[0] + de_pck, und_acopy],
-                             und_aa, last_b, max_load, time_lim, most_merge, (False, 0.0, 0.0), find_l=find_l)
+                             und_aa, last_b, max_load, time_lim, most_merge, (False, 0.0, 0.0), find_l=find_l,
+                             s_time=s_time)
     return
 
 
 def bb_tsp(r, allo, und_a, time_lim=EXCEED_TIME_LIM, best_obj=np.inf, append_und=True,
-           now_punish=0.0, out_obj=False, pre_cal=None, find_l=False, s_time=np.Inf):
+           now_punish=0.0, out_obj=False, pre_cal=None, find_l=False, s_time=np.inf):
     # TP append [last_a, und_a] to r
     if append_und:
         if find_l:
@@ -199,7 +208,7 @@ def bb_tsp(r, allo, und_a, time_lim=EXCEED_TIME_LIM, best_obj=np.inf, append_und
         if out_obj:
             return r, r[2][-1] + now_punish
         return r
-    if time.time() > TSP_ALGORITHM_TIME_LIMIT + s_time:
+    if time.clock() > TSP_ALGORITHM_TIME_LIMIT + s_time:
         if out_obj:
             return None, best_obj
         return None

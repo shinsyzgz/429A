@@ -7,7 +7,6 @@ Created on Thu Jul 21 02:58:12 2016
 
 import pickle
 import time
-import os
 import random
 import merge as mg
 import cPickle as cP
@@ -15,7 +14,7 @@ from multiprocessing import Pool
 from route_adjust import order_node
 from new_merge import merge_remove
 
-PROCESSORS = 140
+PROCESSORS = 60
 most_merge = 10
 full_iter = (False, 3, 2)
 # full_iter = (False, n, (n-1)!)
@@ -127,7 +126,29 @@ def dump_routes(f_name, r, is_set=False, pool1=None, is_compressed=False):
     f.close()
     print('Dump completed!')
     return
-    
+
+
+def generate_count(total_routes, cal_median=False):
+    global allo
+    o1_ids = [oid1 for oid1 in allo['order_id']]
+    x_count_dic = {oid1: 0 for oid1 in o1_ids}
+    x_dic = {oid1: set() for oid1 in o1_ids}
+    route_index = 0
+    for t_r_str in total_routes:
+        t_r_o_ids = t_r_str.split(',')[:-1]
+        for t_r_o_id in t_r_o_ids:
+            x_count_dic[t_r_o_id] += 1
+            x_dic[t_r_o_id].add(route_index)
+        route_index += 1
+    f = open('x_count_dic', 'wb')
+    cP.dump(x_count_dic, f)
+    f.close()
+    if cal_median:
+        counts = x_count_dic.values()
+        counts.sort()
+        return x_count_dic, x_dic, counts[0], counts[len(counts) // 2], counts[-1]
+    return x_count_dic, x_dic
+
     
 def merge_two(r):
     global allo
@@ -141,11 +162,28 @@ def merge_two(r):
     return str_set
 
 
+def accept_prob_by_count(count, co, knot_point):
+    if co[0] == 0.0 == co[1]:
+        return 1.0
+    if count < knot_point:
+        if co[0] == 0.0:
+            return 1.0
+        return (knot_point-count)**(1.0/3)/co[0]+0.5
+    if co[1] == 0.0:
+        return 0.0
+    return -(count-knot_point)**(1.0/3)/co[1]+0.5
+
+
+def prob_co(start_point, knot_point, end_point):
+    return (knot_point-start_point)**(1.0/3)*2, (end_point-knot_point)**(1.0/3)*2
+
+
 f1 = open('allo', 'rb')
 allo = cP.load(f1)
 f1.close()
 
 if __name__ == '__main__':
+    very_beginning_time = time.clock()
     # Multiprocessing
     # loc, allo = loadData.loadData('../original_data')
     # parameters for self evolve
@@ -157,9 +195,14 @@ if __name__ == '__main__':
     inter_prob_o2o = 0.7
     inter_prob_dif = 0.8
     # parameters for random merge
-    rnd_rounds = 10
+    rnd_rounds = 0
     rnd_pairs_num = 5000
     rnd_prob_o2o, rnd_prob_new = 0.3, 0.4
+    # parameters for balance merge
+    b_rounds = 50
+    b_pairs_num = 5000
+    b_o2o_prob = 0.65
+    balance_coefficient = 0.8
     # multiprocessing
     pool = Pool(PROCESSORS, process_pro)
     # Site and O2O evolve themselves
@@ -353,7 +396,9 @@ if __name__ == '__main__':
     # Start random merge process
     now_r = 0
     stime = time.time()
+    isD = False
     while now_r < rnd_rounds:
+        isD = True
         now_r += 1
         print('Start rnd merge round ' + str(now_r))
         rnd_pairs, rnd_types = [], []
@@ -413,9 +458,8 @@ if __name__ == '__main__':
                         new_set.append(rnd_str)
                         total_set.add(rnd_str)
                         if not_add_r:
-                            if not_add_r:
-                                total_r.add(order_node(rnd_str, False))
-                                not_add_r = False
+                            total_r.add(order_node(rnd_str, False))
+                            not_add_r = False
             elif rnd_t == 2:
                 # o2o
                 for rnd_str in rnd_m:
@@ -449,12 +493,157 @@ if __name__ == '__main__':
             dump_routes('total_re', total_r, is_set=True)
             print('Dump completed, next round')
             stime = time.time()
-    dump_routes('site_set', site_set, is_compressed=True)
-    dump_routes('o2o_set', o2o_set, is_compressed=True)
-    dump_routes('new_set', new_set, is_compressed=True)
-    dump_routes('total_set', total_set, is_set=True)
-    dump_routes('total_re', total_r, is_set=True)
-    print('Dump completed, rnd end.')
+    if isD:
+        dump_routes('site_set', site_set, is_compressed=True)
+        dump_routes('o2o_set', o2o_set, is_compressed=True)
+        dump_routes('new_set', new_set, is_compressed=True)
+        dump_routes('total_set', total_set, is_set=True)
+        dump_routes('total_re', total_r, is_set=True)
+        print('Dump completed, rnd end.')
+
+    # Start balance merge process
+    now_r = 0
+    stime = time.time()
+    isD = False
+    # o_ids = [oid for oid in allo['order_id']]
+    b_o2o_ids = [oid for oid in allo[allo['order_type'] == 1]['order_id']]
+    b_site_ids = [oid for oid in allo[allo['order_type'] == 0]['order_id']]
+    while now_r < b_rounds:
+        now_r += 1
+        isD = True
+        print('Start balance merge round ' + str(now_r))
+        print('Generate total count:')
+        num1, num2, num3 = len(site_set), len(o2o_set), len(new_set)
+        count_dict, xr_dict, min_count, med_count, max_count = generate_count(site_set+o2o_set+new_set, True)
+        print('Min, median, max of counts are: ' + str((min_count, med_count, max_count)))
+        med_count = (med_count-min_count)*balance_coefficient+min_count
+        max_count = (max_count-min_count)*balance_coefficient+min_count
+        print('Min, median, max of counts after resize are: ' + str((min_count, med_count, max_count)))
+        count_co = prob_co(min_count, med_count, max_count)
+        print('Generate completed! Start generate pairs')
+        b_pairs, b_types, now_p = [], [], 0
+        while now_p < b_pairs_num:
+            this_type = 0
+            # type: 0 inter, 1 site, 2 o2o
+            # choose the first candidate
+            c_reject = True
+            f_can, s_can = -1, -1
+            while c_reject:
+                if random.random() < b_o2o_prob:
+                    f_can = random.choice(b_o2o_ids)
+                else:
+                    f_can = random.choice(b_site_ids)
+                acc_prob = accept_prob_by_count(count_dict[f_can], count_co, med_count)
+                if random.random() <= acc_prob:
+                    c_reject = False
+            fpic_ind = random.choice(list(xr_dict[f_can]))
+            f_p_t = 0
+            if fpic_ind < num1:
+                # pick a site
+                fpic = site_set[fpic_ind]
+                f_p_t = 1
+            elif fpic_ind < num1 + num2:
+                # pick a o2o
+                fpic = o2o_set[fpic_ind-num1]
+                f_p_t = 2
+            else:
+                # pick a new
+                fpic = new_set[fpic_ind-num1-num2]
+                f_p_t = 0
+            # choose the second candidate
+            c_reject = True
+            while c_reject:
+                if random.random() < b_o2o_prob:
+                    s_can = random.choice(b_o2o_ids)
+                else:
+                    s_can = random.choice(b_site_ids)
+                acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
+                if random.random() <= acc_prob:
+                    c_reject = False
+            spic_ind = random.choice(list(xr_dict[s_can]))
+            s_p_t = 0
+            if spic_ind < num1:
+                # pick a site
+                spic = site_set[spic_ind]
+                s_p_t = 1
+            elif spic_ind < num1 + num2:
+                # pick a o2o
+                spic = o2o_set[spic_ind - num1]
+                s_p_t = 2
+            else:
+                # pick a new
+                spic = new_set[spic_ind - num1 - num2]
+                s_p_t = 0
+            adj_candidate = order_node(merge_remove(fpic, spic, False), False)
+            if adj_candidate not in total_r:
+                b_pairs.append((fpic, spic))
+                if f_p_t == 2 == s_p_t:
+                    this_type = 2
+                elif f_p_t == 1 == s_p_t:
+                    this_type = 1
+                else:
+                    this_type = 0
+                b_types.append(this_type)
+                now_p += 1
+        print('Generate ' + str(len(b_pairs)) + ' completed. Now start to merge...')
+        site_add_len, o2o_add_len, new_add_len = 0, 0, 0
+        b_m_res = pool.map(merge_two, b_pairs)
+        print('Merge complete. Del and add')
+        for b_m, b_t in zip(b_m_res, b_types):
+            not_add_r = True
+            if b_t == 0:
+                # inter
+                for b_str in b_m:
+                    if not (b_str in total_set):
+                        new_add_len += 1
+                        new_set.append(b_str)
+                        total_set.add(b_str)
+                        if not_add_r:
+                            total_r.add(order_node(b_str, False))
+                            not_add_r = False
+            elif b_t == 2:
+                # o2o
+                for b_str in b_m:
+                    if not (b_str in total_set):
+                        o2o_add_len += 1
+                        o2o_set.append(b_str)
+                        total_set.add(b_str)
+                        if not_add_r:
+                            total_r.add(order_node(b_str, False))
+                            not_add_r = False
+            else:
+                # site
+                for b_str in b_m:
+                    if not (b_str in total_set):
+                        site_add_len += 1
+                        site_set.append(b_str)
+                        total_set.add(b_str)
+                        if not_add_r:
+                            total_r.add(order_node(b_str, False))
+                            not_add_r = False
+        print('Add complete.')
+        print('New added: ' + str(new_add_len))
+        print('Site added: ' + str(site_add_len))
+        print('O2O added: ' + str(o2o_add_len))
+        print('Round ' + str(now_r) + 'end..')
+        if time.time() - stime > 30 * 60:
+            dump_routes('site_set', site_set, is_compressed=True)
+            dump_routes('o2o_set', o2o_set, is_compressed=True)
+            dump_routes('new_set', new_set, is_compressed=True)
+            dump_routes('total_set', total_set, is_set=True)
+            dump_routes('total_re', total_r, is_set=True)
+            print('Dump completed, next round')
+            stime = time.time()
+    if isD:
+        dump_routes('site_set', site_set, is_compressed=True)
+        dump_routes('o2o_set', o2o_set, is_compressed=True)
+        dump_routes('new_set', new_set, is_compressed=True)
+        dump_routes('total_set', total_set, is_set=True)
+        dump_routes('total_re', total_r, is_set=True)
+        print('Dump completed, balance end.')
+
+    very_end_time = time.clock()
+    print('Total time: ' + str(very_end_time-very_beginning_time))
 
     '''
     f = open('ori_routes_str', 'rb')
@@ -566,5 +755,3 @@ if __name__ == '__main__':
                 print('read_string: ' + read_r[r_ind])
             r_ind += 1
     '''
-    
-    os.system("pause")
