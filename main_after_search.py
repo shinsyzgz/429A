@@ -128,17 +128,31 @@ def dump_routes(f_name, r, is_set=False, pool1=None, is_compressed=False):
     return
 
 
-def generate_count(total_routes, cal_median=False):
+def generate_count(total_routes, cal_median=False, second_routes=(), third_routes=()):
     global allo
     o1_ids = [oid1 for oid1 in allo['order_id']]
     x_count_dic = {oid1: 0 for oid1 in o1_ids}
-    x_dic = {oid1: set() for oid1 in o1_ids}
+    x_dic = {oid1: (set(), set(), set()) for oid1 in o1_ids}
     route_index = 0
     for t_r_str in total_routes:
         t_r_o_ids = t_r_str.split(',')[:-1]
         for t_r_o_id in t_r_o_ids:
             x_count_dic[t_r_o_id] += 1
-            x_dic[t_r_o_id].add(route_index)
+            x_dic[t_r_o_id][0].add(route_index)
+        route_index += 1
+    route_index = 0
+    for t_r_str in second_routes:
+        t_r_o_ids = t_r_str.split(',')[:-1]
+        for t_r_o_id in t_r_o_ids:
+            x_count_dic[t_r_o_id] += 1
+            x_dic[t_r_o_id][1].add(route_index)
+        route_index += 1
+    route_index = 0
+    for t_r_str in third_routes:
+        t_r_o_ids = t_r_str.split(',')[:-1]
+        for t_r_o_id in t_r_o_ids:
+            x_count_dic[t_r_o_id] += 1
+            x_dic[t_r_o_id][2].add(route_index)
         route_index += 1
     f = open('x_count_dic', 'wb')
     cP.dump(x_count_dic, f)
@@ -148,6 +162,21 @@ def generate_count(total_routes, cal_median=False):
         counts.sort()
         return x_count_dic, x_dic, counts[0], counts[len(counts) // 2], counts[-1]
     return x_count_dic, x_dic
+
+
+def cal_medians(count_dictionary):
+    counts = count_dictionary.values()
+    counts.sort()
+    return counts[0], counts[len(counts) // 2], counts[-1]
+
+
+def add_count_and_dict(r_str, count_d, x_dict, num):
+    set_ind, r_ind = num
+    r_list = r_str.split(',')[:-1]
+    for ord_id in r_list:
+        count_d[ord_id] += 1
+        x_dict[ord_id][set_ind].add(r_ind)
+    return count_d, x_dict
 
     
 def merge_two(r):
@@ -187,15 +216,15 @@ if __name__ == '__main__':
     # Multiprocessing
     # loc, allo = loadData.loadData('../original_data')
     # parameters for self evolve
-    rounds = 0
+    rounds = 50
     pairs_num = 5000
     # parameters for interactions
-    inter_rounds = 0
-    inter_pairs_num = 10000
+    inter_rounds = 50
+    inter_pairs_num = 5000
     inter_prob_o2o = 0.7
     inter_prob_dif = 0.8
     # parameters for random merge
-    rnd_rounds = 0
+    rnd_rounds = 30
     rnd_pairs_num = 5000
     rnd_prob_o2o, rnd_prob_new = 0.3, 0.4
     # parameters for balance merge
@@ -225,30 +254,63 @@ if __name__ == '__main__':
     stime = time.time()
     # Start rounds:
     # pool = Pool(PROCESSORS, process_init, (allo, ))
-    
+    b_o2o_ids = [oid for oid in allo[allo['order_type'] == 1]['order_id']]
+    b_site_ids = [oid for oid in allo[allo['order_type'] == 0]['order_id']]
     now_r = 0
     isD = False
+    print('Generate counts...')
+    count_dict, xr_dict = generate_count(site_set, False, o2o_set, new_set)
+    print('Generate complete!')
     while now_r < rounds:
         isD = True
         now_r += 1
         print('Start rounds ' + str(now_r) + '. Generating pairs')
-        site_pairs, o2o_pairs = [], []
-        now_p = 0
+        min_count, med_count, max_count = cal_medians(count_dict)
+        print('Min, median, max of counts are: ' + str((min_count, med_count, max_count)))
+        med_count = (med_count - min_count) * balance_coefficient + min_count
+        max_count = (max_count - min_count) * balance_coefficient + min_count
+        print('Min, median, max of counts after resize are: ' + str((min_count, med_count, max_count)))
+        count_co = prob_co(min_count, med_count, max_count)
+        now_p, site_pairs, o2o_pairs = 0, [], []
         while now_p < pairs_num:
-            site_candidate = (random.choice(site_set), random.choice(site_set))
+            f_can, s_can = -1, -1
+            c_reject = True
+            while c_reject:
+                f_can = random.choice(b_site_ids)
+                acc_prob = accept_prob_by_count(count_dict[f_can], count_co, med_count)
+                if random.random() <= acc_prob:
+                    c_reject = False
+            c_reject = True
+            while c_reject:
+                s_can = random.choice(b_site_ids)
+                acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
+                if random.random() <= acc_prob:
+                    c_reject = False
+            fpic_ind, spic_ind = random.choice(list(xr_dict[f_can][0])), random.choice(list(xr_dict[s_can][0]))
+            site_candidate = (site_set[fpic_ind], site_set[spic_ind])
             adj_candidate = order_node(merge_remove(site_candidate[0], site_candidate[1], False), False)
-            if adj_candidate in total_r:
-                continue
-            else:
+            if adj_candidate not in total_r:
                 site_pairs.append(site_candidate)
                 now_p += 1
         now_p = 0
         while now_p < pairs_num:
-            o2o_candidate = (random.choice(o2o_set), random.choice(o2o_set))
+            f_can, s_can = -1, -1
+            c_reject = True
+            while c_reject:
+                f_can = random.choice(b_o2o_ids)
+                acc_prob = accept_prob_by_count(count_dict[f_can], count_co, med_count)
+                if random.random() <= acc_prob:
+                    c_reject = False
+            c_reject = True
+            while c_reject:
+                s_can = random.choice(b_o2o_ids)
+                acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
+                if random.random() <= acc_prob:
+                    c_reject = False
+            fpic_ind, spic_ind = random.choice(list(xr_dict[f_can][1])), random.choice(list(xr_dict[s_can][1]))
+            o2o_candidate = (o2o_set[fpic_ind], o2o_set[spic_ind])
             adj_candidate = order_node(merge_remove(o2o_candidate[0], o2o_candidate[1], False), False)
-            if adj_candidate in total_r:
-                continue
-            else:
+            if adj_candidate not in total_r:
                 o2o_pairs.append(o2o_candidate)
                 now_p += 1
         print('Generating complete. Now merge site')
@@ -262,6 +324,7 @@ if __name__ == '__main__':
                     site_add_len += 1
                     site_set.append(site_r)
                     total_set.add(site_r)
+                    add_count_and_dict(site_r, count_dict, xr_dict, (0, len(site_set)-1))
                     if not_add_r:
                         total_r.add(order_node(site_r, False))
                         not_add_r = False
@@ -277,6 +340,7 @@ if __name__ == '__main__':
                     o2o_add_len += 1
                     o2o_set.append(o_str)
                     total_set.add(o_str)
+                    add_count_and_dict(o_str, count_dict, xr_dict, (1, len(o2o_set)-1))
                     if not_add_r:
                         total_r.add(order_node(o_str, False))
                         not_add_r = False
@@ -294,8 +358,8 @@ if __name__ == '__main__':
         dump_routes('o2o_set', o2o_set, is_compressed=True)
         dump_routes('total_set', total_set, is_set=True)
         dump_routes('total_re', total_r, is_set=True)
-        print('Dump completed, self evolve end')
-    
+        print('Dump completed, self evolve end with: ' + str(time.clock()-very_beginning_time))
+
     # Set and O2O interaction
     now_r = 0
     stime = time.time()
@@ -304,32 +368,74 @@ if __name__ == '__main__':
         isD = True
         now_r += 1
         print('Start interaction round ' + str(now_r) + '. Generating pairs')
-        inter_pairs, inter_types = [], []
+        min_count, med_count, max_count = cal_medians(count_dict)
+        print('Min, median, max of counts are: ' + str((min_count, med_count, max_count)))
+        med_count = (med_count - min_count) * balance_coefficient + min_count
+        max_count = (max_count - min_count) * balance_coefficient + min_count
+        print('Min, median, max of counts after resize are: ' + str((min_count, med_count, max_count)))
+        count_co = prob_co(min_count, med_count, max_count)
+        now_p, inter_pairs, inter_types = 0, [], []
         # inter_type: 0 interaction, 1 site, 2 o2o
-        now_p = 0
         while now_p < inter_pairs_num:
             this_type = 0
+            f_can, s_can = -1, -1
             if random.random() < inter_prob_o2o:
                 # pick one from O2O orders
-                fpic = random.choice(o2o_set)
+                c_reject = True
+                while c_reject:
+                    f_can = random.choice(b_o2o_ids)
+                    acc_prob = accept_prob_by_count(count_dict[f_can], count_co, med_count)
+                    if random.random() <= acc_prob:
+                        c_reject = False
+                fpic = random.choice(list(xr_dict[f_can][1]))
                 if random.random() < inter_prob_dif:
                     # pick one from site orders
-                    spic = random.choice(site_set)
+                    c_reject = True
+                    while c_reject:
+                        s_can = random.choice(b_site_ids)
+                        acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
+                        if random.random() <= acc_prob:
+                            c_reject = False
+                    spic = random.choice(list(xr_dict[s_can][0]))
                     this_type = 0
                 else:
                     # pick one from o2o orders
-                    spic = random.choice(o2o_set)
+                    c_reject = True
+                    while c_reject:
+                        s_can = random.choice(b_o2o_ids)
+                        acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
+                        if random.random() <= acc_prob:
+                            c_reject = False
+                    spic = random.choice(list(xr_dict[s_can][1]))
                     this_type = 2
             else:
                 # pick one from site orders
-                fpic = random.choice(site_set)
+                c_reject = True
+                while c_reject:
+                    f_can = random.choice(b_site_ids)
+                    acc_prob = accept_prob_by_count(count_dict[f_can], count_co, med_count)
+                    if random.random() <= acc_prob:
+                        c_reject = False
+                fpic = random.choice(list(xr_dict[f_can][0]))
                 if random.random() < inter_prob_dif:
                     # pick from o2o
-                    spic = random.choice(o2o_set)
+                    c_reject = True
+                    while c_reject:
+                        s_can = random.choice(b_o2o_ids)
+                        acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
+                        if random.random() <= acc_prob:
+                            c_reject = False
+                    spic = random.choice(list(xr_dict[s_can][1]))
                     this_type = 0
                 else:
                     # pick from site
-                    spic = random.choice(site_set)
+                    c_reject = True
+                    while c_reject:
+                        s_can = random.choice(b_site_ids)
+                        acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
+                        if random.random() <= acc_prob:
+                            c_reject = False
+                    spic = random.choice(list(xr_dict[s_can][0]))
                     this_type = 1
             adj_candidate = order_node(merge_remove(spic, fpic, False), False)
             if adj_candidate not in total_r:
@@ -349,6 +455,7 @@ if __name__ == '__main__':
                         new_add_len += 1
                         new_set.append(inter_str)
                         total_set.add(inter_str)
+                        add_count_and_dict(inter_str, count_dict, xr_dict, (2, len(new_set)-1))
                         if not_add_r:
                             total_r.add(order_node(inter_str, False))
                             not_add_r = False
@@ -359,6 +466,7 @@ if __name__ == '__main__':
                         o2o_add_len += 1
                         o2o_set.append(o2o_str)
                         total_set.add(o2o_str)
+                        add_count_and_dict(o2o_str, count_dict, xr_dict, (1, len(o2o_set)-1))
                         if not_add_r:
                             total_r.add(order_node(o2o_str, False))
                             not_add_r = False
@@ -369,6 +477,7 @@ if __name__ == '__main__':
                         site_add_len += 1
                         site_set.append(site_str)
                         total_set.add(site_str)
+                        add_count_and_dict(site_str, count_dict, xr_dict, (0, len(site_set)-1))
                         if not_add_r:
                             total_r.add(order_node(site_str, False))
                             not_add_r = False
@@ -391,7 +500,7 @@ if __name__ == '__main__':
         dump_routes('new_set', new_set, is_compressed=True)
         dump_routes('total_set', total_set, is_set=True)
         dump_routes('total_re', total_r, is_set=True)
-        print('Dump completed, interaction end.')
+        print('Dump completed, interaction end with ' + str(time.clock()-very_beginning_time))
     
     # Start random merge process
     now_r = 0
@@ -401,37 +510,79 @@ if __name__ == '__main__':
         isD = True
         now_r += 1
         print('Start rnd merge round ' + str(now_r))
-        rnd_pairs, rnd_types = [], []
-        now_p = 0
+        min_count, med_count, max_count = cal_medians(count_dict)
+        print('Min, median, max of counts are: ' + str((min_count, med_count, max_count)))
+        med_count = (med_count - min_count) * balance_coefficient + min_count
+        max_count = (max_count - min_count) * balance_coefficient + min_count
+        print('Min, median, max of counts after resize are: ' + str((min_count, med_count, max_count)))
+        count_co = prob_co(min_count, med_count, max_count)
+        now_p, rnd_pairs, rnd_types = 0, [], []
         while now_p < rnd_pairs_num:
             this_type = 0
             # type: 0 inter, 1 site, 2 o2o
             f_p_r = random.random()
             s_p_r = random.random()
             f_p_t, s_p_t = 0, 0
+            f_can, s_can = -1, -1
             if f_p_r < rnd_prob_o2o:
                 # fpick o2o order
-                fpic = random.choice(o2o_set)
+                c_reject = True
+                while c_reject:
+                    f_can = random.choice(b_o2o_ids)
+                    acc_prob = accept_prob_by_count(count_dict[f_can], count_co, med_count)
+                    if random.random() <= acc_prob:
+                        c_reject = False
+                fpic = random.choice(list(xr_dict[f_can][1]))
                 f_p_t = 2
             elif f_p_r < rnd_prob_o2o + rnd_prob_new:
                 # fpick inter order
-                fpic = random.choice(new_set)
+                c_reject = True
+                while c_reject:
+                    f_can = random.choice(b_o2o_ids)
+                    acc_prob = accept_prob_by_count(count_dict[f_can], count_co, med_count)
+                    if random.random() <= acc_prob:
+                        c_reject = False
+                fpic = random.choice(list(xr_dict[f_can][2]))
                 f_p_t = 0
             else:
                 # fpick site order
-                fpic = random.choice(site_set)
+                c_reject = True
+                while c_reject:
+                    f_can = random.choice(b_site_ids)
+                    acc_prob = accept_prob_by_count(count_dict[f_can], count_co, med_count)
+                    if random.random() <= acc_prob:
+                        c_reject = False
+                fpic = random.choice(list(xr_dict[f_can][0]))
                 f_p_t = 1
             if s_p_r < rnd_prob_o2o:
                 # spick o2o order
-                spic = random.choice(o2o_set)
+                c_reject = True
+                while c_reject:
+                    s_can = random.choice(b_o2o_ids)
+                    acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
+                    if random.random() <= acc_prob:
+                        c_reject = False
+                spic = random.choice(list(xr_dict[s_can][1]))
                 s_p_t = 2
             elif s_p_r < rnd_prob_o2o + rnd_prob_new:
                 # spick inter order
-                spic = random.choice(new_set)
+                sc_reject = True
+                while c_reject:
+                    s_can = random.choice(b_o2o_ids)
+                    acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
+                    if random.random() <= acc_prob:
+                        c_reject = False
+                spic = random.choice(list(xr_dict[s_can][2]))
                 s_p_t = 0
             else:
                 # spick site order
-                spic = random.choice(site_set)
+                c_reject = True
+                while c_reject:
+                    s_can = random.choice(b_site_ids)
+                    acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
+                    if random.random() <= acc_prob:
+                        c_reject = False
+                spic = random.choice(list(xr_dict[s_can][0]))
                 s_p_t = 1
             adj_candidate = order_node(merge_remove(fpic, spic, False), False)
             if adj_candidate not in total_r:
@@ -457,6 +608,7 @@ if __name__ == '__main__':
                         new_add_len += 1
                         new_set.append(rnd_str)
                         total_set.add(rnd_str)
+                        add_count_and_dict(rnd_str, count_dict, xr_dict, (2, len(new_set)-1))
                         if not_add_r:
                             total_r.add(order_node(rnd_str, False))
                             not_add_r = False
@@ -467,6 +619,7 @@ if __name__ == '__main__':
                         o2o_add_len += 1
                         o2o_set.append(rnd_str)
                         total_set.add(rnd_str)
+                        add_count_and_dict(rnd_str, count_dict, xr_dict, (1, len(o2o_set)-1))
                         if not_add_r:
                             total_r.add(order_node(rnd_str, False))
                             not_add_r = False
@@ -477,6 +630,7 @@ if __name__ == '__main__':
                         site_add_len += 1
                         site_set.append(rnd_str)
                         total_set.add(rnd_str)
+                        add_count_and_dict(rnd_str, count_dict, xr_dict, (0, len(site_set)-1))
                         if not_add_r:
                             total_r.add(order_node(rnd_str, False))
                             not_add_r = False
@@ -499,15 +653,13 @@ if __name__ == '__main__':
         dump_routes('new_set', new_set, is_compressed=True)
         dump_routes('total_set', total_set, is_set=True)
         dump_routes('total_re', total_r, is_set=True)
-        print('Dump completed, rnd end.')
+        print('Dump completed, rnd end with ' + str(time.clock()-very_beginning_time))
 
     # Start balance merge process
     now_r = 0
     stime = time.time()
     isD = False
     # o_ids = [oid for oid in allo['order_id']]
-    b_o2o_ids = [oid for oid in allo[allo['order_type'] == 1]['order_id']]
-    b_site_ids = [oid for oid in allo[allo['order_type'] == 0]['order_id']]
     while now_r < b_rounds:
         now_r += 1
         isD = True
@@ -536,7 +688,7 @@ if __name__ == '__main__':
                 acc_prob = accept_prob_by_count(count_dict[f_can], count_co, med_count)
                 if random.random() <= acc_prob:
                     c_reject = False
-            fpic_ind = random.choice(list(xr_dict[f_can]))
+            fpic_ind = random.choice(list(xr_dict[f_can][0]))
             f_p_t = 0
             if fpic_ind < num1:
                 # pick a site
@@ -560,7 +712,7 @@ if __name__ == '__main__':
                 acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
                 if random.random() <= acc_prob:
                     c_reject = False
-            spic_ind = random.choice(list(xr_dict[s_can]))
+            spic_ind = random.choice(list(xr_dict[s_can][0]))
             s_p_t = 0
             if spic_ind < num1:
                 # pick a site
