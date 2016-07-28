@@ -197,6 +197,35 @@ if __name__ == '__main__':
             elif r_s > 0.99:
                 sel_routes.append(total_routes[r_s_ind])
             r_s_ind += 1
+        debug_routes = []
+        debug_cost = []
+        debug_X = [set() for oid in allo['order_id']]
+        debug_sel = []
+        r_s_ind = 0
+        for r_s in r_select:
+            if r_s > 0.001:
+                r_str1 = total_routes[r_s_ind]
+                debug_routes.append(r_str1)
+                debug_cost.append(r_costs[r_s_ind])
+                debug_sel.append(r_s)
+                t_r_o_ids = r_str1.split(',')[:-1]
+                for t_r_o_id in t_r_o_ids:
+                    debug_X[x_dic[t_r_o_id]].add(len(debug_routes)-1)
+            r_s_ind += 1
+        f11 = open('solved_res', 'wb')
+        cP.dump((debug_routes, debug_cost, debug_X, debug_sel), f11)
+        f11.close()
+        f11 = open('solved_temp.csv', 'wb')
+        write11 = csv.writer(f11)
+        write11.writerow(['index', 'cost', 'select'])
+        for de_ind, de_c, de_s in zip(range(len(debug_cost)), debug_cost, debug_sel):
+            write11.writerow([de_ind, de_c, de_s])
+        write11.writerow(['X'])
+        for de_x in debug_X:
+            de_x_l = list(de_x)
+            de_x_l.sort()
+            write11.writerow(de_x_l)
+        f11.close()
         # Check cost and output
         cost, re_routes = 0.0, []
         for sl_r_str in sel_routes:

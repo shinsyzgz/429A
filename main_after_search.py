@@ -231,7 +231,7 @@ if __name__ == '__main__':
     b_rounds = 50
     b_pairs_num = 5000
     b_o2o_prob = 0.65
-    balance_coefficient = 0.8
+    balance_coefficient = 0.1
     # multiprocessing
     pool = Pool(PROCESSORS, process_pro)
     # Site and O2O evolve themselves
@@ -387,7 +387,7 @@ if __name__ == '__main__':
                     acc_prob = accept_prob_by_count(count_dict[f_can], count_co, med_count)
                     if random.random() <= acc_prob:
                         c_reject = False
-                fpic = random.choice(list(xr_dict[f_can][1]))
+                fpic = o2o_set[random.choice(list(xr_dict[f_can][1]))]
                 if random.random() < inter_prob_dif:
                     # pick one from site orders
                     c_reject = True
@@ -396,7 +396,7 @@ if __name__ == '__main__':
                         acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
                         if random.random() <= acc_prob:
                             c_reject = False
-                    spic = random.choice(list(xr_dict[s_can][0]))
+                    spic = site_set[random.choice(list(xr_dict[s_can][0]))]
                     this_type = 0
                 else:
                     # pick one from o2o orders
@@ -406,7 +406,7 @@ if __name__ == '__main__':
                         acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
                         if random.random() <= acc_prob:
                             c_reject = False
-                    spic = random.choice(list(xr_dict[s_can][1]))
+                    spic = o2o_set[random.choice(list(xr_dict[s_can][1]))]
                     this_type = 2
             else:
                 # pick one from site orders
@@ -416,7 +416,7 @@ if __name__ == '__main__':
                     acc_prob = accept_prob_by_count(count_dict[f_can], count_co, med_count)
                     if random.random() <= acc_prob:
                         c_reject = False
-                fpic = random.choice(list(xr_dict[f_can][0]))
+                fpic = site_set[random.choice(list(xr_dict[f_can][0]))]
                 if random.random() < inter_prob_dif:
                     # pick from o2o
                     c_reject = True
@@ -425,7 +425,7 @@ if __name__ == '__main__':
                         acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
                         if random.random() <= acc_prob:
                             c_reject = False
-                    spic = random.choice(list(xr_dict[s_can][1]))
+                    spic = o2o_set[random.choice(list(xr_dict[s_can][1]))]
                     this_type = 0
                 else:
                     # pick from site
@@ -435,7 +435,7 @@ if __name__ == '__main__':
                         acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
                         if random.random() <= acc_prob:
                             c_reject = False
-                    spic = random.choice(list(xr_dict[s_can][0]))
+                    spic = site_set[random.choice(list(xr_dict[s_can][0]))]
                     this_type = 1
             adj_candidate = order_node(merge_remove(spic, fpic, False), False)
             if adj_candidate not in total_r:
@@ -532,7 +532,7 @@ if __name__ == '__main__':
                     acc_prob = accept_prob_by_count(count_dict[f_can], count_co, med_count)
                     if random.random() <= acc_prob:
                         c_reject = False
-                fpic = random.choice(list(xr_dict[f_can][1]))
+                fpic = o2o_set[random.choice(list(xr_dict[f_can][1]))]
                 f_p_t = 2
             elif f_p_r < rnd_prob_o2o + rnd_prob_new:
                 # fpick inter order
@@ -542,7 +542,7 @@ if __name__ == '__main__':
                     acc_prob = accept_prob_by_count(count_dict[f_can], count_co, med_count)
                     if random.random() <= acc_prob:
                         c_reject = False
-                fpic = random.choice(list(xr_dict[f_can][2]))
+                fpic = new_set[random.choice(list(xr_dict[f_can][2]))]
                 f_p_t = 0
             else:
                 # fpick site order
@@ -552,7 +552,7 @@ if __name__ == '__main__':
                     acc_prob = accept_prob_by_count(count_dict[f_can], count_co, med_count)
                     if random.random() <= acc_prob:
                         c_reject = False
-                fpic = random.choice(list(xr_dict[f_can][0]))
+                fpic = site_set[random.choice(list(xr_dict[f_can][0]))]
                 f_p_t = 1
             if s_p_r < rnd_prob_o2o:
                 # spick o2o order
@@ -562,7 +562,7 @@ if __name__ == '__main__':
                     acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
                     if random.random() <= acc_prob:
                         c_reject = False
-                spic = random.choice(list(xr_dict[s_can][1]))
+                spic = o2o_set[random.choice(list(xr_dict[s_can][1]))]
                 s_p_t = 2
             elif s_p_r < rnd_prob_o2o + rnd_prob_new:
                 # spick inter order
@@ -572,7 +572,7 @@ if __name__ == '__main__':
                     acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
                     if random.random() <= acc_prob:
                         c_reject = False
-                spic = random.choice(list(xr_dict[s_can][2]))
+                spic = new_set[random.choice(list(xr_dict[s_can][2]))]
                 s_p_t = 0
             else:
                 # spick site order
@@ -582,7 +582,7 @@ if __name__ == '__main__':
                     acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
                     if random.random() <= acc_prob:
                         c_reject = False
-                spic = random.choice(list(xr_dict[s_can][0]))
+                spic = site_set[random.choice(list(xr_dict[s_can][0]))]
                 s_p_t = 1
             adj_candidate = order_node(merge_remove(fpic, spic, False), False)
             if adj_candidate not in total_r:

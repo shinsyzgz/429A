@@ -13,11 +13,12 @@ def opt(C, X):
     print eps
     var_choice = lp.LpVariable.dicts('route', routeIdx, cat='Binary')
     # var_choice=lp.LpVariable.dicts('route',routeIdx,lowBound=0)#尝试松弛掉01变量
+    exceed_labor = lp.LpVariable('Number of routes exceed 1000', 0)
     prob = lp.LpProblem("lastMile", lp.LpMinimize)
 
-    prob += lp.lpSum(var_choice[i] * C[i] for i in routeIdx)
+    prob += exceed_labor * 100000 + lp.lpSum(var_choice[i] * C[i] for i in routeIdx)
 
-    prob += lp.lpSum(var_choice[i] for i in routeIdx) <= 1000 + eps
+    prob += lp.lpSum(var_choice[i] for i in routeIdx) <= 1000 + exceed_labor + eps
     for i in orderIdx:
         prob += lp.lpSum(var_choice[j] for j in X[i]) >= (1 - eps)
 
