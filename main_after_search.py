@@ -566,7 +566,7 @@ if __name__ == '__main__':
                 s_p_t = 2
             elif s_p_r < rnd_prob_o2o + rnd_prob_new:
                 # spick inter order
-                sc_reject = True
+                c_reject = True
                 while c_reject:
                     s_can = random.choice(b_o2o_ids)
                     acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
