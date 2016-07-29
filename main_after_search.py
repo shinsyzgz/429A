@@ -542,8 +542,13 @@ if __name__ == '__main__':
                     acc_prob = accept_prob_by_count(count_dict[f_can], count_co, med_count)
                     if random.random() <= acc_prob:
                         c_reject = False
-                fpic = new_set[random.choice(list(xr_dict[f_can][2]))]
-                f_p_t = 0
+                temp_in_set = xr_dict[f_can][2]
+                if len(temp_in_set) > 0:
+                    fpic = new_set[random.choice(list(xr_dict[f_can][2]))]
+                    f_p_t = 0
+                else:
+                    fpic = o2o_set[random.choice(list(xr_dict[f_can][1]))]
+                    f_p_t = 2
             else:
                 # fpick site order
                 c_reject = True
@@ -572,8 +577,13 @@ if __name__ == '__main__':
                     acc_prob = accept_prob_by_count(count_dict[s_can], count_co, med_count)
                     if random.random() <= acc_prob:
                         c_reject = False
-                spic = new_set[random.choice(list(xr_dict[s_can][2]))]
-                s_p_t = 0
+                temp_in_set = xr_dict[s_can][2]
+                if len(temp_in_set) > 0:
+                    spic = new_set[random.choice(list(xr_dict[s_can][2]))]
+                    s_p_t = 0
+                else:
+                    spic = o2o_set[random.choice(list(xr_dict[s_can][1]))]
+                    s_p_t = 2
             else:
                 # spick site order
                 c_reject = True
