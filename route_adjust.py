@@ -36,16 +36,16 @@ def optimal_route(r):
     return opt_str
 
 
-def old_to_new(pool1, out_path='del_rep/', is_return=False):
+def old_to_new(pool1, out_path='del_rep/', in_path='', is_return=False):
     # This part for adjust the old route version into the new merge one... Delete replicate routes
     print('reading files...')
-    site_set_old = load_routes('site_set', need_decompression=False)
+    site_set_old = load_routes(in_path + 'site_set', need_decompression=False)
     site_num_old = len(site_set_old)
     print('Site complete with num: ' + str(site_num_old))
-    o2o_set_old = load_routes('o2o_set', need_decompression=False)
+    o2o_set_old = load_routes(in_path + 'o2o_set', need_decompression=False)
     o2o_num_old = len(o2o_set_old)
     print('O2O complete with num: ' + str(o2o_num_old))
-    new_set_old = load_routes('new_set', need_decompression=False)
+    new_set_old = load_routes(in_path + 'new_set', need_decompression=False)
     new_num_old = len(new_set_old)
     print('New complete with num: ' + str(new_num_old))
     print('Start to transform site...')
