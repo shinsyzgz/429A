@@ -8,11 +8,8 @@ Created on Thu Jul 21 02:58:12 2016
 import time
 import os
 import random
-import merge as mg
-import cPickle as cP
-from multiprocessing import Pool
 from optimize_route import opt_route
-from main_lp import load_routes, dump_routes, process_pro
+from transform_tools import *
 from route_adjust import order_node
 from scipy.spatial.distance import cdist
 import numpy as np
@@ -51,13 +48,6 @@ def merge_remove(r1, r2, compare_dis=True):
         if min_dis >= MAX_MERGE_DIS:
             return r2
     return oid_to_str(r1_list)
-
-
-def oid_to_str(o_list):
-    r_str = ''
-    for ord_id in o_list:
-        r_str += ord_id + ','
-    return r_str
 
 
 f1 = open('allo', 'rb')

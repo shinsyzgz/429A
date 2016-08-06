@@ -1,125 +1,19 @@
 import time
 import os
-import merge as mg
-import cPickle as cP
-from multiprocessing import Pool
-from solveByLP import opt
+# from solveByLP import opt
 import csv
 import heuristic
-
-PROCESSORS = 100
-
-
-def route_to_str(r):
-    r_str = ''
-    for ord_id in r[4]:
-        r_str += ord_id + ','
-    return r_str
+from transform_tools import *
 
 
-def str_to_route(r_str):
-    global allo
-    r_nodes, pck = [], []
-    r_ord = r_str.split(',')[:-1]
-    pick_set = {}
-    for ord_id in r_ord:
-        if ord_id in pick_set:
-            # delivery
-            if pick_set[ord_id] > 1:
-                raise Exception('replicated order in ' + r_str + ' with order id ' + 'ord_id')
-            r_nodes.append(allo.at[ord_id, 'dest_id'])
-            pck.append(-allo.at[ord_id, 'num'])
-            pick_set[ord_id] += 1
-        else:
-            # pickup
-            r_nodes.append(allo.at[ord_id, 'ori_id'])
-            pck.append(allo.at[ord_id, 'num'])
-            pick_set[ord_id] = 0
-    new_r = [r_nodes, [], [], pck, r_ord]
-    mg.recal_time(new_r, allo, is_ll=True)
-    last, und = mg.find_last(new_r)
-    mg.append_to_route(new_r, [last, und])
-    return new_r
-
-
-def cal_c(r_str):
-    global allo
-    r_nodes, pck = [], []
-    r_ord = r_str.split(',')[:-1]
-    pick_set = {}
-    for ord_id in r_ord:
-        if ord_id in pick_set:
-            # delivery
-            if pick_set[ord_id] > 1:
-                raise Exception('replicated order in ' + r_str + ' with order id ' + 'ord_id')
-            r_nodes.append(allo.at[ord_id, 'dest_id'])
-            pck.append(-allo.at[ord_id, 'num'])
-            pick_set[ord_id] += 1
-        else:
-            # pickup
-            r_nodes.append(allo.at[ord_id, 'ori_id'])
-            pck.append(allo.at[ord_id, 'num'])
-            pick_set[ord_id] = 0
-    new_r = [r_nodes, [], [], pck, r_ord]
-    new_r, p_info = mg.recal_time(new_r, allo, True, is_ll=True)
-    return p_info[0] + new_r[2][-1]
-
-
-def process_pro():
-    import win32api
-    import win32process
-    import win32con
-    pid = win32api.GetCurrentProcessId()
-    handle = win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS, True, pid)
-    win32process.SetPriorityClass(handle, win32process.REALTIME_PRIORITY_CLASS)
-
-
-def load_routes(f_name, has_set=False, is_set=False, pool1=None, need_decompression=True):
-    print('Start to read: ' + f_name)
-    f = open(f_name, 'rb')
-    if has_set:
-        read_r, temp_s = cP.load(f)
-    else:
-        read_r = cP.load(f)
-    f.close()
-    print('Load completed')
-    if is_set or (not need_decompression):
-        return read_r
-    print('Start to decompression the routes')
-    if pool1 is None:
-        pool1 = Pool(PROCESSORS, process_pro)
-    r_strans = pool1.map(str_to_route, read_r)
-    print('Decompression completed!')
-    return r_strans
-
-
-def dump_routes(f_name, r, is_set=False, pool1=None, is_compressed=False):
-    print('Start to dump: ' + f_name)
-    f = open(f_name, 'wb')
-    if is_set or is_compressed:
-        cP.dump(r, f)
-        f.close()
-        print('Dump complete!')
-        return
-    print('Start to compression the routes')
-    if pool1 is None:
-        pool1 = Pool(PROCESSORS, process_pro)
-    r_str = pool1.map(route_to_str, r)
-    print('Compression completed!')
-    cP.dump(r_str, f)
-    f.close()
-    print('Dump completed!')
-    return
-
-
-def write_routes_res(file_name, route):
+def write_routes_res(file_name, route_res):
     f = open('carriers', 'rb')
     carrier_id = cP.load(f)
     f.close()
     f = open(file_name, 'wb')
     write = csv.writer(f)
     c_ind = 0
-    for r in route:
+    for r in route_res:
         c_id = carrier_id[c_ind]
         c_ind += 1
         for node, arr, lea, num, order in zip(r[0], r[1], r[2], r[3], r[4]):
@@ -179,11 +73,11 @@ if __name__ == '__main__':
     for t_r_str in total_routes:
         t_r_o_ids = t_r_str.split(',')[:-1]
         route_set.add(route_index)
-        m_ben.append(len(t_r_o_ids))
-        m_gain.append(len(t_r_o_ids)*1.0/r_costs[route_index])
         for t_r_o_id in t_r_o_ids:
             X[x_dic[t_r_o_id]].add(route_index)
             route[route_index].add(x_dic[t_r_o_id])
+        m_ben.append(len(route[route_index]))
+        m_gain.append(len(route[route_index]) * 1.0 / r_costs[route_index])
         route_index += 1
     print('relation matrix complete! Time: ' + str(time.time()-stime))
     print(len(X))

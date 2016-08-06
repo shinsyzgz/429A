@@ -14,7 +14,7 @@ from multiprocessing import Pool
 from route_adjust import order_node
 from new_merge import merge_remove
 
-PROCESSORS = 60
+PROCESSORS = 100
 most_merge = 10
 full_iter = (False, 3, 2)
 # full_iter = (False, n, (n-1)!)
@@ -216,10 +216,10 @@ if __name__ == '__main__':
     # Multiprocessing
     # loc, allo = loadData.loadData('../original_data')
     # parameters for self evolve
-    rounds = 50
+    rounds = 10
     pairs_num = 5000
     # parameters for interactions
-    inter_rounds = 50
+    inter_rounds = 10
     inter_pairs_num = 5000
     inter_prob_o2o = 0.7
     inter_prob_dif = 0.8
@@ -231,7 +231,7 @@ if __name__ == '__main__':
     b_rounds = 50
     b_pairs_num = 5000
     b_o2o_prob = 0.65
-    balance_coefficient = 0.1
+    balance_coefficient = 0.01
     # multiprocessing
     pool = Pool(PROCESSORS, process_pro)
     # Site and O2O evolve themselves

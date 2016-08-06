@@ -10,16 +10,16 @@ import time
 # Constant: speed is the car speed. MERGE_MAX_DISTANCE is the max distance to merge
 SPEED = 250.0
 MERGE_MAX_DISTANCE_DELIVERY = 45000.0
-MERGE_MAX_DISTANCE_PICKUP = 10000.0
+MERGE_MAX_DISTANCE_PICKUP = 50000.0
 SITE_END_TIME = 720.0
 MAX_LOADS = 140.0
-EXCEED_TIME_LIM = 40.0
-EXCEED_TIME_LIM_TSP = 50.0
+EXCEED_TIME_LIM = 100.0
+EXCEED_TIME_LIM_TSP = 100.0
 O2O_MINI_START = None
 # O2O_MINI_START = {o2o order id: (min pickup arr time, nearest site id)}
 CO1, CO2 = 2.0 * 6378137, np.pi/180.0
 TSP_ALGORITHM_TIME_LIMIT = 80
-MERGE_ALGORITHM_TIME_LIMIT = 500
+MERGE_ALGORITHM_TIME_LIMIT = 400
 
 
 def merge_set(all_orders, routes_set_a, routes_set_b=None, most_merge=np.inf, max_load=MAX_LOADS,
