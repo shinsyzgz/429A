@@ -5,11 +5,13 @@ import os
 SITE_END_TIME = 720.0
 MAX_LOADS = 140.0
 PUNISH_CO = 5.0
-CPLEX_TIME_LIMIT = 600
+CPLEX_TIME_LIMIT = 3600
 
 
-def opt_route(route_str, allo, o2o_mini, initial=None):
+def opt_route(route_str, allo, o2o_mini, initial=None, timelim=CPLEX_TIME_LIMIT):
     # initial = (given start id, given load, given start time)
+    global CPLEX_TIME_LIMIT
+    CPLEX_TIME_LIMIT = timelim
     route = route_str.split(',')[:-1]
     node_ind = range(len(route))
     order_dict, stay_t, pick_t, require_t, num, mini_start, ll = {}, [], [], [], [], [], []
@@ -157,7 +159,7 @@ def opt_with_solver(node_ind, order_dict, travel_t, stay_t, pick_t, require_t, n
         prob += a[j] >= l[i] + travel_t[(i, j)] + big_m*(x[(i, j)] - 1)
         prob += t[j] >= t[i] + 1 + big_m*(x[(i, j)] - 1)
         prob += load[j] >= load[i] + num[i] + big_m*(x[(i, j)] - 1)
-    prob.solve(lp.CPLEX(msg=0, timelimit=CPLEX_TIME_LIMIT, options=['set logfile cplex/cplex%d.log' % os.getpid()]))
+    prob.solve(lp.CPLEX(msg=1, timelimit=CPLEX_TIME_LIMIT, options=['set logfile cplex/cplex%d.log' % os.getpid()]))
     # set threads 100
     if lp.LpStatus[prob.status] != 'Infeasible':
         sol_list = [int(round(t[i].varValue)) for i in node_ind]

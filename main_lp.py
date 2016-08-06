@@ -5,6 +5,7 @@ import cPickle as cP
 from multiprocessing import Pool
 from solveByLP import opt
 import csv
+import heuristic
 
 PROCESSORS = 100
 
@@ -170,24 +171,33 @@ if __name__ == '__main__':
     # generate the X
     # X = pool.map(cal_x, [o_id for o_id in allo['order_id']])
     X = [set() for oid in allo['order_id']]
+    route = [set() for nouse in total_routes]
+    m_ben, m_gain, route_set = [], [], set()
     o_ids = [oid for oid in allo['order_id']]
     x_dic = {oid: i for oid, i in zip(o_ids, range(len(o_ids)))}
     route_index = 0
     for t_r_str in total_routes:
         t_r_o_ids = t_r_str.split(',')[:-1]
+        route_set.add(route_index)
+        m_ben.append(len(t_r_o_ids))
+        m_gain.append(len(t_r_o_ids)*1.0/r_costs[route_index])
         for t_r_o_id in t_r_o_ids:
             X[x_dic[t_r_o_id]].add(route_index)
+            route[route_index].add(x_dic[t_r_o_id])
         route_index += 1
     print('relation matrix complete! Time: ' + str(time.time()-stime))
     print(len(X))
 
     # Solve the LP problem
     stime = time.time()
-    obj, r_select, status = opt(r_costs, X)
+    # obj, r_select, status = opt(r_costs, X)
+    r_select, obj = heuristic.constraint_weighted_set_cover(r_costs, X, route, 1000, 1, m_ben, m_gain, route_set)
     print('Solve complete with time: ' + str(time.time()-stime))
     if r_select is None:
         print('LP error!')
     else:
+        sel_routes = [total_routes[r_s_ind] for r_s_ind in r_select]
+        '''
         sel_routes = []
         r_s_ind = 0
         for r_s in r_select:
@@ -226,6 +236,7 @@ if __name__ == '__main__':
             de_x_l.sort()
             write11.writerow(de_x_l)
         f11.close()
+        '''
         # Check cost and output
         cost, re_routes = 0.0, []
         for sl_r_str in sel_routes:
