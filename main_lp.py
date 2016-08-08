@@ -28,7 +28,7 @@ f1.close()
 if __name__ == '__main__':
     # Multiprocessing
     # loc, allo = loadData.loadData('../original_data')
-    lp_path = 'lpM20/'
+    lp_path = 'lpnb100/'
     # parameters for self evolve
     rounds = 0
     pairs_num = 5000
@@ -47,13 +47,13 @@ if __name__ == '__main__':
     # Site and O2O evolve themselves
     # read files:
     print('reading files...')
-    total_routes += load_routes(lp_path + 'site_set', need_decompression=False)
+    total_routes += load_routes(lp_path + 'site_re', need_decompression=False)
     site_num = len(total_routes)
     print('Site complete with num: ' + str(site_num))
-    total_routes += load_routes(lp_path + 'o2o_set', need_decompression=False)
+    total_routes += load_routes(lp_path + 'o2o_re', need_decompression=False)
     o2o_num = len(total_routes) - site_num
     print('O2O complete with num: ' + str(o2o_num))
-    total_routes += load_routes(lp_path + 'new_set', need_decompression=False)
+    total_routes += load_routes(lp_path + 'new_re', need_decompression=False)
     new_num = len(total_routes) - o2o_num - site_num
     print('New complete with num: ' + str(new_num))
     stime = time.time()
