@@ -108,6 +108,8 @@ def old_to_new(pool1, out_path='del_rep/', in_path='', is_return=False):
     dump_routes(out_path + 'new_re', new_record, is_compressed=True)
     print('new dump complete!')
     dump_routes(out_path + 'total_re', total_reorder, is_set=True)
+    if is_return:
+        return site_record, o2o_record, new_record
 
 
 f1 = open('order_dict', 'rb')

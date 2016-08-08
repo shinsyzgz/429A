@@ -26,36 +26,32 @@ allo = cP.load(f1)
 f1.close()
 
 if __name__ == '__main__':
-    # Multiprocessing
-    # loc, allo = loadData.loadData('../original_data')
-    lp_path = 'lpnb100/'
-    # parameters for self evolve
-    rounds = 0
-    pairs_num = 5000
-    # parameters for interactions
-    inter_rounds = 25
-    inter_pairs_num = 10000
-    inter_prob_o2o = 0.7
-    inter_prob_dif = 0.8
-    # parameters for random merge
-    rnd_rounds = 10
-    rnd_pairs_num = 5000
-    rnd_prob_o2o, rnd_prob_new = 0.3, 0.4
     # multiprocessing
     pool = Pool(PROCESSORS, process_pro)
-    total_routes = []
-    # Site and O2O evolve themselves
-    # read files:
-    print('reading files...')
-    total_routes += load_routes(lp_path + 'site_re', need_decompression=False)
-    site_num = len(total_routes)
-    print('Site complete with num: ' + str(site_num))
-    total_routes += load_routes(lp_path + 'o2o_re', need_decompression=False)
-    o2o_num = len(total_routes) - site_num
-    print('O2O complete with num: ' + str(o2o_num))
-    total_routes += load_routes(lp_path + 'new_re', need_decompression=False)
-    new_num = len(total_routes) - o2o_num - site_num
-    print('New complete with num: ' + str(new_num))
+    read_path = False
+    lp_path = 'lpnb100/'
+    if read_path:
+        # read files:
+        total_routes = []
+        print('reading files...')
+        total_routes += load_routes(lp_path + 'site_re', need_decompression=False)
+        site_num = len(total_routes)
+        print('Site complete with num: ' + str(site_num))
+        total_routes += load_routes(lp_path + 'o2o_re', need_decompression=False)
+        o2o_num = len(total_routes) - site_num
+        print('O2O complete with num: ' + str(o2o_num))
+        total_routes += load_routes(lp_path + 'new_re', need_decompression=False)
+        new_num = len(total_routes) - o2o_num - site_num
+        print('New complete with num: ' + str(new_num))
+    else:
+        from route_adjust import old_to_new
+        print('Start transform...')
+        sites, o2os, news = old_to_new(pool, lp_path, is_return=True)
+        total_routes = sites + o2os + news
+        site_num, o2o_num, new_num = len(sites), len(o2os), len(news)
+        print('Site complete with num: ' + str(site_num))
+        print('O2O complete with num: ' + str(o2o_num))
+        print('New complete with num: ' + str(new_num))
     stime = time.time()
     # generate the costs
     r_costs = pool.map(cal_c, total_routes)
@@ -69,6 +65,7 @@ if __name__ == '__main__':
     m_ben, m_gain, route_set = [], [], set()
     o_ids = [oid for oid in allo['order_id']]
     x_dic = {oid: i for oid, i in zip(o_ids, range(len(o_ids)))}
+    all_orders = set(range(len(o_ids)))
     route_index = 0
     for t_r_str in total_routes:
         t_r_o_ids = t_r_str.split(',')[:-1]
@@ -85,58 +82,67 @@ if __name__ == '__main__':
     # Solve the LP problem
     stime = time.time()
     # obj, r_select, status = opt(r_costs, X)
-    r_select, obj = heuristic.constraint_weighted_set_cover(r_costs, X, route, 1000, 1, m_ben, m_gain, route_set)
-    print('Solve complete with time: ' + str(time.time()-stime))
-    if r_select is None:
-        print('LP error!')
-    else:
-        sel_routes = [total_routes[r_s_ind] for r_s_ind in r_select]
-        '''
-        sel_routes = []
-        r_s_ind = 0
-        for r_s in r_select:
-            if 0.01 < r_s < 0.99:
-                print('Relaxation error! Half route detected with selection = ' + str(r_s))
-                break
-            elif r_s > 0.99:
-                sel_routes.append(total_routes[r_s_ind])
-            r_s_ind += 1
-        debug_routes = []
-        debug_cost = []
-        debug_X = [set() for oid in allo['order_id']]
-        debug_sel = []
-        r_s_ind = 0
-        for r_s in r_select:
-            if r_s > 0.001:
-                r_str1 = total_routes[r_s_ind]
-                debug_routes.append(r_str1)
-                debug_cost.append(r_costs[r_s_ind])
-                debug_sel.append(r_s)
-                t_r_o_ids = r_str1.split(',')[:-1]
-                for t_r_o_id in t_r_o_ids:
-                    debug_X[x_dic[t_r_o_id]].add(len(debug_routes)-1)
-            r_s_ind += 1
-        f11 = open('solved_res', 'wb')
-        cP.dump((debug_routes, debug_cost, debug_X, debug_sel), f11)
-        f11.close()
-        f11 = open('solved_temp.csv', 'wb')
-        write11 = csv.writer(f11)
-        write11.writerow(['index', 'cost', 'select'])
-        for de_ind, de_c, de_s in zip(range(len(debug_cost)), debug_cost, debug_sel):
-            write11.writerow([de_ind, de_c, de_s])
-        write11.writerow(['X'])
-        for de_x in debug_X:
-            de_x_l = list(de_x)
-            de_x_l.sort()
-            write11.writerow(de_x_l)
-        f11.close()
-        '''
-        # Check cost and output
-        cost, re_routes = 0.0, []
-        for sl_r_str in sel_routes:
-            cost += cal_c(sl_r_str)
-            re_routes.append(str_to_route(sl_r_str))
-        print('Check total cost: ' + str(cost) + '. Difference with lp cost: ' + str(cost - obj))
-        write_routes_res(lp_path + 'test_result.csv', re_routes)
+    no_solve = True
+    while no_solve:
+        r_select, obj = heuristic.constraint_weighted_set_cover(r_costs, X, route, 1000, 1, m_ben, m_gain, route_set)
+        print('Solve complete with time: ' + str(time.time() - stime))
+        if obj is None:
+            print('LP error!')
+            covered = set()
+            for r_ind in r_select:
+                covered |= route[r_ind]
+            uncovered = all_orders - covered
+
+            pass  # TBA
+        else:
+            sel_routes = [total_routes[r_s_ind] for r_s_ind in r_select]
+            '''
+            sel_routes = []
+            r_s_ind = 0
+            for r_s in r_select:
+                if 0.01 < r_s < 0.99:
+                    print('Relaxation error! Half route detected with selection = ' + str(r_s))
+                    break
+                elif r_s > 0.99:
+                    sel_routes.append(total_routes[r_s_ind])
+                r_s_ind += 1
+            debug_routes = []
+            debug_cost = []
+            debug_X = [set() for oid in allo['order_id']]
+            debug_sel = []
+            r_s_ind = 0
+            for r_s in r_select:
+                if r_s > 0.001:
+                    r_str1 = total_routes[r_s_ind]
+                    debug_routes.append(r_str1)
+                    debug_cost.append(r_costs[r_s_ind])
+                    debug_sel.append(r_s)
+                    t_r_o_ids = r_str1.split(',')[:-1]
+                    for t_r_o_id in t_r_o_ids:
+                        debug_X[x_dic[t_r_o_id]].add(len(debug_routes)-1)
+                r_s_ind += 1
+            f11 = open('solved_res', 'wb')
+            cP.dump((debug_routes, debug_cost, debug_X, debug_sel), f11)
+            f11.close()
+            f11 = open('solved_temp.csv', 'wb')
+            write11 = csv.writer(f11)
+            write11.writerow(['index', 'cost', 'select'])
+            for de_ind, de_c, de_s in zip(range(len(debug_cost)), debug_cost, debug_sel):
+                write11.writerow([de_ind, de_c, de_s])
+            write11.writerow(['X'])
+            for de_x in debug_X:
+                de_x_l = list(de_x)
+                de_x_l.sort()
+                write11.writerow(de_x_l)
+            f11.close()
+            '''
+            # Check cost and output
+            cost, re_routes = 0.0, []
+            for sl_r_str in sel_routes:
+                cost += cal_c(sl_r_str)
+                re_routes.append(str_to_route(sl_r_str))
+            print('Check total cost: ' + str(cost) + '. Difference with lp cost: ' + str(cost - obj))
+            write_routes_res(lp_path + 'test_result.csv', re_routes)
+            break
 
     os.system("pause")

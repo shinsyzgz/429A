@@ -2,7 +2,7 @@ from multiprocessing import Pool
 import cPickle as cP
 import merge as mg
 
-PROCESSORS = 1
+PROCESSORS = 100
 f1 = open('allo', 'rb')
 allo = cP.load(f1)
 f1.close()

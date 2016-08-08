@@ -6,11 +6,15 @@ import numpy as np
 from transform_tools import oid_to_str
 
 
-def find_mini_order(s_order_id):
+def find_mini_order(s_order_id, required_length=None):
     remain_set = {x for x in allo['order_id']}
+    if required_length is None:
+        right_hs = 0
+    else:
+        right_hs = len(remain_set) - required_length
     remain_set.remove(s_order_id)
     order_list, dis_list = [s_order_id], []
-    while len(remain_set) > 0:
+    while len(remain_set) > right_hs:
         print_len(len(remain_set), 1000)
         min_dis, min_node, now_node = np.inf, None, order_list[-1]
         for c_o_id in remain_set:
@@ -66,7 +70,7 @@ def constraint_weighted_set_cover(cost, X, route=None, max_route=1000, alpha=1, 
             if m_ben[r_ind] >= rem*1.0/i and m_gain[r_ind] > max_q:
                 q, max_q = r_ind, m_gain[r_ind]
         if q is None:
-            return None, None
+            return s, None
         s.add(q)
         obj += cost[q]
         rem -= m_ben[q]
@@ -86,6 +90,7 @@ def constraint_weighted_set_cover(cost, X, route=None, max_route=1000, alpha=1, 
                 route_set.remove(r_ind)
             else:
                 m_gain[r_ind] = m_ben[r_ind]*1.0/cost[r_ind]
+        print('Path ' + str(i) + ' found! Remain order: ' + str(rem))
         i -= 1
     return s, obj
 
